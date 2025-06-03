@@ -1,15 +1,24 @@
-
-from flask import Flask, request, abort
 import os
+from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import openai
 
 app = Flask(__name__)
 
-# 環境変数からトークンとシークレットを取得
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+# 環境変数からキーを取得
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+openai.api_key = OPENAI_API_KEY
+
+@app.route("/")
+def home():
+    return "LINE タロットボットは稼働中です。"
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -25,8 +34,19 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_text = event.message.text
-    reply_text = f"あなたのメッセージ：「{user_text}」を受け取りました。"
+    user_message = event.message.text
+
+    # OpenAI に問い合わせて返答を取得
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "あなたは有能なタロット占い師です。"},
+            {"role": "user", "content": user_message},
+        ],
+    )
+
+    reply_text = response["choices"][0]["message"]["content"].strip()
+
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply_text)
