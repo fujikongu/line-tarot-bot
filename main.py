@@ -1,4 +1,3 @@
-
 import os
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -8,17 +7,9 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# 環境変数からトークンとシークレットを取得
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-openai_api_key = os.getenv("OPENAI_API_KEY")
-
-# OpenAIクライアントを初期化
-client = OpenAI(api_key=openai_api_key)
-
-@app.route("/")
-def hello_world():
-    return "hello"
+line_bot_api = LineBotApi(os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
+handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -36,8 +27,7 @@ def callback():
 def handle_message(event):
     user_message = event.message.text
 
-    # OpenAI API呼び出し
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "あなたは優秀なタロット占い師です。"},
@@ -45,11 +35,8 @@ def handle_message(event):
         ]
     )
 
-    reply_text = response.choices[0].message.content.strip()
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=reply_text)
-    )
+    reply_text = response.choices[0].message.content
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
 if __name__ == "__main__":
     app.run()
