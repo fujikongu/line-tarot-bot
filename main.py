@@ -1,23 +1,30 @@
+
 import os
-import json
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-from openai import OpenAI
+import openai
 
 app = Flask(__name__)
 
-# LINE APIキーとOpenAIキーの読み込み
-line_bot_api = LineBotApi(os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
-handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+# 環境変数からキーを取得
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+openai.api_key = OPENAI_API_KEY
+
+@app.route("/")
+def home():
+    return "LINE タロットボットは稼働中です。"
 
 @app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
 
     try:
         handler.handle(body, signature)
@@ -30,17 +37,21 @@ def callback():
 def handle_message(event):
     user_message = event.message.text
 
-    # OpenAI APIへ問い合わせ
-    response = openai_client.chat.completions.create(
+    # OpenAI に問い合わせて返答を取得
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "あなたは優秀なタロット占い師です。"},
-            {"role": "user", "content": user_message}
-        ]
+            {"role": "system", "content": "あなたは有能なタロット占い師です。ユーザーの質問に対して、5枚のカードを引き、それぞれのカードの意味をジャンルに応じて詳しく説明してください。"},
+            {"role": "user", "content": user_message},
+        ],
     )
 
-    reply_text = response.choices[0].message.content.strip()
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+    reply_text = response["choices"][0]["message"]["content"].strip()
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply_text)
+    )
 
 if __name__ == "__main__":
     app.run()
