@@ -1,27 +1,22 @@
-import os
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
-)
-from genre_handlers import get_tarot_response_by_genre
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+import os
+import random
+import openai
 
 app = Flask(__name__)
 
-# 環境変数からキーを取得
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+line_bot_api = LineBotApi(os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
+handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-# ユーザーごとの状態管理用
-user_states = {}
+GENRES = ["恋愛運", "仕事運", "金運", "結婚・未来の恋愛", "今日の運勢"]
 
 @app.route("/")
-def home():
-    return "LINEタロットBotは稼働中です。"
+def index():
+    return "OK"
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -37,36 +32,42 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_id = event.source.user_id
-    user_message = event.message.text.strip()
+    user_text = event.message.text
 
-    # ユーザーがジャンル選択中であれば処理
-    if user_id in user_states and user_states[user_id] == "awaiting_genre":
-        genre = user_message
-        response = get_tarot_response_by_genre(genre)
+    if user_text in GENRES:
+        tarot_result = generate_tarot_response(user_text)
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=response)
+            TextSendMessage(text=tarot_result)
         )
-        del user_states[user_id]
-        return
+    else:
+        quick_reply = QuickReply(
+            items=[
+                QuickReplyButton(action=MessageAction(label=genre, text=genre))
+                for genre in GENRES
+            ]
+        )
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(
+                text="ジャンルを選んでください：",
+                quick_reply=quick_reply
+            )
+        )
 
-    # ジャンル選択を促すクイックリプライを送信
-    user_states[user_id] = "awaiting_genre"
-    reply_text = "ジャンルを選んでください："
-    quick_reply_buttons = QuickReply(
-        items=[
-            QuickReplyButton(action=MessageAction(label="恋愛運", text="恋愛運")),
-            QuickReplyButton(action=MessageAction(label="仕事運", text="仕事運")),
-            QuickReplyButton(action=MessageAction(label="金運", text="金運")),
-            QuickReplyButton(action=MessageAction(label="結婚・未来の恋愛", text="結婚・未来の恋愛")),
-            QuickReplyButton(action=MessageAction(label="今日の運勢", text="今日の運勢")),
-        ]
-    )
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=reply_text, quick_reply=quick_reply_buttons)
-    )
+def generate_tarot_response(genre):
+    card = random.choice(["運命の輪", "太陽", "月", "塔", "恋人", "力"])
+    prompt = f"タロットカード「{card}」が{genre}について意味することを詳しく教えてください。"
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=500
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"占い結果の取得中にエラーが発生しました: {str(e)}"
 
 if __name__ == "__main__":
     app.run()
