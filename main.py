@@ -79,18 +79,14 @@ def handle_message(event):
             meaning = tarot_data[card][upright][position]
             result_lines.append(f"{i+1}. {meaning}")
 
-        # AI要約文の仮生成（ここでは文字数を最大に近づけた定型文にしておく）
-        conclusion = (
-            "【結論】あなたの状況は多面的であり、過去・現在・未来・障害・助言それぞれの要素が複雑に絡み合っています。"
-            "これらのカードは、あなたが今後どのような意識を持って行動すべきかを示しています。"
-            "最も重要なのは、助言にあった通り、自分自身の内面と丁寧に向き合いながら、前向きな行動を心がけることです。"
-            "すべてはあなたの選択と意志によって変わっていく可能性があります。"
-        )
+        # 正しいトリプルクォートによる結論文
+        conclusion = """【結論】
+あなたの状況は多面的であり、過去・現在・未来・障害・助言それぞれの要素が複雑に絡み合っています。
+これらのカードは、あなたが今後どのような意識を持って行動すべきかを示しています。
+最も重要なのは、助言にあった通り、自分自身の内面と丁寧に向き合いながら、前向きな行動を心がけることです。
+すべてはあなたの選択と意志によって変わっていく可能性があります。"""
 
-        full_message = "
-".join(result_lines) + "
-
-" + conclusion
+        full_message = "\n".join(result_lines) + "\n\n" + conclusion
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=full_message))
         SESSION_USERS.discard(user_id)
 
