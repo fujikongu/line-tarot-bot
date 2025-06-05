@@ -8,7 +8,7 @@ from linebot.models import (
 
 app = Flask(__name__)
 
-LINE_CHANNEL_ACCESS_TOKEN = "HGXyasDnCBkCz6kJQkYUl1YmbBxWqlMGdOcPsqirW098MPJlS9oRCIlfbP6wPSqafFb9ng6NeFPOQKMKOIYPqhqjhB3oBjZXGgZq8UzMsW6v204VHRS1xgRkCWvFBRbWXsGphmAy3tJptzzkx79eqQdB0489/10/w1cDnyilFU="
+LINE_CHANNEL_ACCESS_TOKEN = "HGXyasDnCBCkZ6QJKqXUi1YtmBxNqIvMGdc0PsqjrWO98MPjSIo9RcIlfbP6wPSqaFb9mg6NeFPOQKMKOIYPqhqjhB3oBjZXGgZq8UzMsW6v204VHRS1xggRkCwVFBRbWsXGphmAy31ptzxzk79eaQdB04t89/1O/w1cDnyilFU="
 LINE_CHANNEL_SECRET = "a0d8b83b274d45da4527bfee014097ef"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
@@ -64,7 +64,8 @@ def handle_message(event):
     if user_text in genre_messages:
         reply = TextSendMessage(text=genre_messages[user_text])
     else:
-        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。\n例：mem1091")
+        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。
+例：mem1091")
 
     line_bot_api.reply_message(event.reply_token, reply)
 
