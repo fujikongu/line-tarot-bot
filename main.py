@@ -14,7 +14,6 @@ LINE_CHANNEL_SECRET = "a0d8b83b274d45da4527bfee014097ef"
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# 会員パスワード
 MEMBER_PASSWORD = "mem1091"
 
 @app.route("/callback", methods=["POST"])
@@ -31,13 +30,11 @@ def callback():
 def handle_message(event):
     user_text = event.message.text.strip()
 
-    # 認証待ち：パスワード入力の促し
     if user_text.lower() in ["start", "パス", "パスワード"]:
         reply = TextSendMessage(text="🔒 会員パスワードを入力してください（例：mem1091）")
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    # パスワード認証処理
     if user_text == MEMBER_PASSWORD or user_text in [f"会員パス：{MEMBER_PASSWORD}", f"会員パス:{MEMBER_PASSWORD}"]:
         reply = TextSendMessage(
             text="✅ 認証成功しました！占いたいジャンルを選んでください。",
@@ -52,7 +49,6 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    # 占い結果
     genre_messages = {
         "恋愛運": "💖 恋愛運：心ときめく出会いが近づいています。",
         "仕事運": "💼 仕事運：チャンスはあなたの準備次第です。",
@@ -64,10 +60,7 @@ def handle_message(event):
     if user_text in genre_messages:
         reply = TextSendMessage(text=genre_messages[user_text])
     else:
-        reply = TextSendMessage(
-            text="このBotを利用するには、会員パスワードを入力してください。
-例：mem1091"
-        )
+        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。\n例：mem1091")
 
     line_bot_api.reply_message(event.reply_token, reply)
 
