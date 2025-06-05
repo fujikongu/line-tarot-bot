@@ -3,6 +3,7 @@ import os
 import json
 import random
 import openai
+import traceback
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -53,7 +54,9 @@ def generate_summary_with_openai(result_lines):
         )
         return response.choices[0].message["content"].strip()
     except Exception as e:
-        return "⚠️ 要約生成に失敗しました。後でもう一度お試しください。"
+        print("=== OpenAI API Error ===")
+        traceback.print_exc()
+        return f"⚠️ 要約生成に失敗しました。原因: {str(e)}"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
