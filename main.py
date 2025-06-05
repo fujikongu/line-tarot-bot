@@ -2,18 +2,18 @@
 import os
 import json
 import random
-import openai
 import traceback
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from openai import OpenAI
 
 app = Flask(__name__)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 GENRE_FILE_MAP = {
     "恋愛運": "romance_tarot_template.json",
@@ -37,13 +37,9 @@ def callback():
     return "OK"
 
 def generate_summary_with_openai(result_lines):
-    prompt = """以下はタロットカード5枚のリーディング結果です。
-全体の流れを読み取り、ユーザーに向けた深い結論を日本語で300〜500文字で要約してください：
-
-""" + "\n".join(result_lines)
-
+    prompt = "以下はタロットカード5枚のリーディング結果です。\n全体の流れを読み取り、300〜500文字で結論を日本語で要約してください：\n" + "\n".join(result_lines)
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "あなたは熟練のタロット占い師です。"},
@@ -52,7 +48,7 @@ def generate_summary_with_openai(result_lines):
             max_tokens=800,
             temperature=0.7
         )
-        return response.choices[0].message["content"].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         print("=== OpenAI API Error ===")
         traceback.print_exc()
@@ -75,7 +71,7 @@ def handle_message(event):
                 TextSendMessage(text="ジャンルを選んでください：", quick_reply=quick_reply)
             )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="パスワードを入力してください。"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="パスワードを入力してください。\n例：mem1091"))
     else:
         if msg not in GENRE_FILE_MAP:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="無効なジャンルです。最初からやり直してください。"))
