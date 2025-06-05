@@ -2,6 +2,7 @@
 import os
 import json
 import random
+import openai
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -11,8 +12,8 @@ app = Flask(__name__)
 
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# ジャンルとテンプレートファイル名のマップ
 GENRE_FILE_MAP = {
     "恋愛運": "romance_tarot_template.json",
     "仕事運": "work_tarot_template.json",
@@ -28,13 +29,34 @@ SESSION_USERS = set()
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
-
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-
     return "OK"
+
+def generate_summary_with_openai(result_lines):
+    prompt = (
+        "以下はタロットカード5枚のリーディング結果です。
+"
+        "全体の流れを読み取って、ユーザーに向けた深い結論を日本語で300〜500文字でまとめてください：
+
+"
+        + "\n".join(result_lines)
+    )
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "あなたは熟練のタロット占い師です。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+        return response.choices[0].message["content"].strip()
+    except Exception as e:
+        return "⚠️ 要約生成に失敗しました。後でもう一度お試しください。"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -79,13 +101,7 @@ def handle_message(event):
             meaning = tarot_data[card][upright][position]
             result_lines.append(f"{i+1}. {meaning}")
 
-        # 正しいトリプルクォートによる結論文
-        conclusion = """【結論】
-あなたの状況は多面的であり、過去・現在・未来・障害・助言それぞれの要素が複雑に絡み合っています。
-これらのカードは、あなたが今後どのような意識を持って行動すべきかを示しています。
-最も重要なのは、助言にあった通り、自分自身の内面と丁寧に向き合いながら、前向きな行動を心がけることです。
-すべてはあなたの選択と意志によって変わっていく可能性があります。"""
-
+        conclusion = generate_summary_with_openai(result_lines)
         full_message = "\n".join(result_lines) + "\n\n" + conclusion
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=full_message))
         SESSION_USERS.discard(user_id)
