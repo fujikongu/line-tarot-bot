@@ -36,14 +36,11 @@ def callback():
     return "OK"
 
 def generate_summary_with_openai(result_lines):
-    prompt = (
-        "以下はタロットカード5枚のリーディング結果です。
-"
-        "全体の流れを読み取って、ユーザーに向けた深い結論を日本語で300〜500文字でまとめてください：
+    prompt = """以下はタロットカード5枚のリーディング結果です。
+全体の流れを読み取って、ユーザーに向けた深い結論を日本語で300〜500文字でまとめてください：
 
-"
-        + "\n".join(result_lines)
-    )
+""" + "\n".join(result_lines)
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
