@@ -34,12 +34,12 @@ def handle_message(event):
     if text.startswith("会員パス：") or text.startswith("会員パス:"):
         reply_text = "認証完了しました。占いを始められます。"
     elif text in ["占って", "占い", "占う"]:
-        reply_text = "占いたい項目を教えてください。
+reply_text = "占いたい項目を教えてください。"
 例：「恋愛運」「金運」「仕事運」「結婚運」「今日の運勢」"
     elif text in ["恋愛運", "金運", "仕事運", "結婚運", "今日の運勢"]:
         reply_text = f"{text}の結果：近日中に素敵な出来事が訪れるかもしれません。"
     else:
-        reply_text = "このBotを利用するには、note で公開されている『会員パス』を送信してください。
+reply_text = "このBotを利用するには、note で公開されている『会員パス』を送信してください。"
 例：会員パス：123abc"
 
     line_bot_api.reply_message(
