@@ -37,8 +37,8 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    # パスワード認証処理
-    if user_text == MEMBER_PASSWORD:
+    # パスワード認証処理（「mem1091」または「会員パス：mem1091」形式）
+    if user_text == MEMBER_PASSWORD or user_text in [f"会員パス：{MEMBER_PASSWORD}", f"会員パス:{MEMBER_PASSWORD}"]:
         reply = TextSendMessage(
             text="✅ 認証成功しました！占いたいジャンルを選んでください。",
             quick_reply=QuickReply(items=[
@@ -64,7 +64,8 @@ def handle_message(event):
     if user_text in genre_messages:
         reply = TextSendMessage(text=genre_messages[user_text])
     else:
-        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。\n例：mem1091")
+        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。
+例：mem1091")
 
     line_bot_api.reply_message(event.reply_token, reply)
 
