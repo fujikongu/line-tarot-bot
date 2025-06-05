@@ -37,13 +37,13 @@ def callback():
 
 def generate_summary_with_openai(result_lines):
     prompt = """以下はタロットカード5枚のリーディング結果です。
-全体の流れを読み取って、ユーザーに向けた深い結論を日本語で300〜500文字でまとめてください：
+全体の流れを読み取り、ユーザーに向けた深い結論を日本語で300〜500文字で要約してください：
 
 """ + "\n".join(result_lines)
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "あなたは熟練のタロット占い師です。"},
                 {"role": "user", "content": prompt}
