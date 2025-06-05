@@ -5,6 +5,9 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 )
+import os
+import random
+import json
 
 app = Flask(__name__)
 
@@ -15,6 +18,11 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 MEMBER_PASSWORD = "mem1091"
+
+with open("romance_tarot_template.json", "r", encoding="utf-8") as f:
+    tarot_dict = json.load(f)
+
+positions = ["過去", "現在", "未来", "障害", "助言"]
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -31,8 +39,8 @@ def handle_message(event):
     user_text = event.message.text.strip()
 
     if user_text.lower() in ["start", "パス", "パスワード"]:
-        reply = TextSendMessage(text="🔒 会員パスワードを入力してください（例：mem1091）")
-        line_bot_api.reply_message(event.reply_token, reply)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(
+            text="🔒 会員パスワードを入力してください（例：mem1091）"))
         return
 
     if user_text == MEMBER_PASSWORD or user_text in [f"会員パス：{MEMBER_PASSWORD}", f"会員パス:{MEMBER_PASSWORD}"]:
@@ -49,20 +57,19 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    genre_messages = {
-        "恋愛運": "💖 恋愛運：心ときめく出会いが近づいています。",
-        "仕事運": "💼 仕事運：チャンスはあなたの準備次第です。",
-        "金運": "💰 金運：予想外の収入に期待できそう！",
-        "結婚・未来の恋愛": "💍 結婚・未来の恋愛：大きな転機が訪れそうです。",
-        "今日の運勢": "🌟 今日の運勢：ポジティブな気持ちが幸運を呼びます。"
-    }
+    if user_text == "恋愛運":
+        drawn_cards = random.sample(list(tarot_dict.keys()), 5)
+        results = []
+        for i, card in enumerate(drawn_cards):
+            position = positions[i]
+            upright = random.choice(["正位置", "逆位置"])
+            meaning = tarot_dict[card][upright][position]
+            results.append(f"{i+1}枚目（{position}）: {meaning}")
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🔮 恋愛運占い（5枚引き）結果：\n" + "\n\n".join(results)))
+        return
 
-    if user_text in genre_messages:
-        reply = TextSendMessage(text=genre_messages[user_text])
-    else:
-        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。\n例：mem1091")
-
-    line_bot_api.reply_message(event.reply_token, reply)
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(
+        text="このBotを利用するには、会員パスワードを入力してください。\n例：mem1091"))
 
 if __name__ == "__main__":
     app.run()
