@@ -50,7 +50,7 @@ def handle_message(event):
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="このBotを利用するには、noteで公開されている『会員パス』を送信してください。
+                    text="このBotを利用するには、noteで公開されている『会員パス』を送信してください。"
 例：会員パス：123abc"
                 )
             )
