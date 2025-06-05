@@ -64,8 +64,10 @@ def handle_message(event):
     if user_text in genre_messages:
         reply = TextSendMessage(text=genre_messages[user_text])
     else:
-        reply = TextSendMessage(text="このBotを利用するには、会員パスワードを入力してください。
-例：mem1091")
+        reply = TextSendMessage(
+            text="このBotを利用するには、会員パスワードを入力してください。
+例：mem1091"
+        )
 
     line_bot_api.reply_message(event.reply_token, reply)
 
