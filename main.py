@@ -66,7 +66,7 @@ def handle_message(event):
             )
             line_bot_api.reply_message(event.reply_token, template_message)
         elif text in ["恋愛運", "金運", "仕事運", "結婚運", "今日の運勢"]:
-            result = f"{text}の結果：ここに占い結果が表示されます。"
+            result = f"{text}の結果:ここに占い結果が表示されます。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result))
         else:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="「占って」または占いたいジャンルを入力してください。"))
