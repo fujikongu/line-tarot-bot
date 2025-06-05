@@ -37,7 +37,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    # パスワード認証処理（「mem1091」または「会員パス：mem1091」形式）
+    # パスワード認証処理
     if user_text == MEMBER_PASSWORD or user_text in [f"会員パス：{MEMBER_PASSWORD}", f"会員パス:{MEMBER_PASSWORD}"]:
         reply = TextSendMessage(
             text="✅ 認証成功しました！占いたいジャンルを選んでください。",
@@ -52,7 +52,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, reply)
         return
 
-    # 占い結果（簡易版）
+    # 占い結果
     genre_messages = {
         "恋愛運": "💖 恋愛運：心ときめく出会いが近づいています。",
         "仕事運": "💼 仕事運：チャンスはあなたの準備次第です。",
