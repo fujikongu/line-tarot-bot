@@ -7,32 +7,30 @@ import openai
 
 app = Flask(__name__)
 
-# 環境変数からトークン・シークレット・OpenAIキーを取得
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+# 環境変数
+YOUR_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+YOUR_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MEMBER_PASSWORD = os.getenv("MEMBER_PASSWORD", "123abc")  # 共通パスワード
-AUTHORIZED_USERS_FILE = "authorized_users.txt"
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
+line_bot_api = LineBotApi(YOUR_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(YOUR_CHANNEL_SECRET)
 openai.api_key = OPENAI_API_KEY
 
-# ファイルから許可ユーザーIDを読み込む
-def load_authorized_users():
-    if not os.path.exists(AUTHORIZED_USERS_FILE):
-        return set()
-    with open(AUTHORIZED_USERS_FILE, "r") as f:
-        return set(line.strip() for line in f.readlines())
+# 会員パスワード
+VALID_PASSWORD = "mem1091"
+AUTHORIZED_USERS_FILE = "authorized_users.txt"
 
-# ユーザーIDをファイルに保存
-def authorize_user(user_id):
+# 認証済みユーザー確認
+def is_user_authorized(user_id):
+    if not os.path.exists(AUTHORIZED_USERS_FILE):
+        return False
+    with open(AUTHORIZED_USERS_FILE, "r") as f:
+        return user_id in f.read()
+
+# 認証ユーザーを登録
+def add_authorized_user(user_id):
     with open(AUTHORIZED_USERS_FILE, "a") as f:
         f.write(user_id + "\n")
-
-@app.route("/")
-def home():
-    return "LINE占いBotは稼働中です。"
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -46,33 +44,44 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_message = event.message.text.strip()
     user_id = event.source.user_id
-    authorized_users = load_authorized_users()
+    user_message = event.message.text.strip()
 
-    # パスワード入力処理
     if user_message.startswith("会員パス："):
-        input_pass = user_message.replace("会員パス：", "").strip()
-        if input_pass == MEMBER_PASSWORD:
-            if user_id not in authorized_users:
-                authorize_user(user_id)
-            reply_text = "認証完了しました。占いを始められます。"
+        password = user_message.replace("会員パス：", "").strip()
+        if password == VALID_PASSWORD:
+            add_authorized_user(user_id)
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="認証完了しました。占いを始められます。")
+            )
         else:
-            reply_text = "パスワードが間違っています。"
-    elif user_id not in authorized_users:
-        reply_text = "このBotを利用するには、noteで公開されている『会員パス』を送信してください。例：会員パス：123abc"
-    else:
-        # 占い応答（OpenAI）
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="パスワードが正しくありません。")
+            )
+        return
+
+    if not is_user_authorized(user_id):
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="このBotを利用するには、noteで公開されている『会員パス』を送信してください。\n例：会員パス：123abc")
+        )
+        return
+
+    if user_message in ["恋愛運", "金運", "仕事運", "結婚運", "今日の運勢"]:
+        prompt = f"あなたは有能なタロット占い師です。ユーザーの「{user_message}」について、5枚引きで深く占い、結果を日本語で丁寧に説明してください。"
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "あなたは有能なタロット占い師です。"},
-                {"role": "user", "content": user_message},
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"{user_message}を占ってください"},
             ],
         )
         reply_text = response["choices"][0]["message"]["content"].strip()
+    else:
+        reply_text = "占いたい項目を教えてください。\n例：「恋愛運」「金運」「仕事運」「結婚運」「今日の運勢」"
 
-    # 応答送信
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply_text)
