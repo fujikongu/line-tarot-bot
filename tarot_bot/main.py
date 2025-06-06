@@ -1,135 +1,102 @@
-
-import os
 import json
 import requests
 from flask import Flask, request, abort
+
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+import os
 
 app = Flask(__name__)
 
-# 環境変数からLINEチャネル情報とGitHubトークン取得
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = "fujikongu/line-tarot-bot"
-GITHUB_FILE_PATH = "password_issuer/passwords.json"
+# 環境変数からLINEのチャネルシークレットとアクセストークンを取得
+LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# ユーザーごとの認証状態保存
-user_auth_status = {}
+# GitHubのpasswords.jsonのRaw URL
+PASSWORDS_JSON_URL = "https://raw.githubusercontent.com/fujikongu/line-tarot-bot/main/password_issuer/passwords.json"
 
-def fetch_passwords_from_github():
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-    response = requests.get(url, headers=headers)
+# GitHubから最新のpasswords.jsonを取得
+def fetch_valid_passwords():
+    response = requests.get(PASSWORDS_JSON_URL)
     if response.status_code == 200:
-        return json.loads(response.text)
+        return response.json()
     else:
-        print(f"Failed to fetch passwords.json: {response.status_code}, {response.text}")
+        print("Failed to fetch passwords.json:", response.status_code)
         return []
 
-@app.route("/callback", methods=["POST"])
+# 占いの状態を記憶する辞書（ユーザーIDごと）
+user_states = {}
+
+@app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers["X-Line-Signature"]
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
 
-    return "OK"
+    return 'OK'
 
-@handler.add(MessageEvent, message=TextMessage)
+@handler.add(MessageEvent, MessageEvent.message.__class__)
 def handle_message(event):
     user_id = event.source.user_id
-    text = event.message.text.strip()
+    user_message = event.message.text.strip()
 
-    # ユーザー未認証かつパスワード入力の場面
-    if user_auth_status.get(user_id) != "authenticated":
-        passwords = fetch_passwords_from_github()
-        if text in passwords:
-            # パスワ有効
-            user_auth_status[user_id] = "authenticated"
+    # 現在有効なパスワードを取得
+    valid_passwords = fetch_valid_passwords()
 
-            # GitHub上のpasswords.jsonからこのパスを削除
-            delete_password_from_github(text)
-
-            # ジャンル選択を表示
-            reply_genre_selection(event)
-        else:
-            # パスワ無効
+    # ユーザーがまだ認証されていない場合
+    if user_id not in user_states:
+        if user_message in valid_passwords:
+            user_states[user_id] = {'authenticated': True, 'used_password': user_message}
+            # GitHub側のpasswords.jsonからこのパスワードは手動で消してください or 自動消去は別対応
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="有効なパスワードを入力してください。")
+                TextSendMessage(text='パスワード認証成功！ジャンルを選んでください：\n1. 恋愛運\n2. 仕事運\n3. 金運\n4. 結婚\n5. 未来の恋愛\n6. 今日の運勢')
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='パスワードが正しくありません。')
             )
     else:
-        # 認証済ユーザー → 通常のジャンル選択後の会話進行（例として固定応答）
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=f"「{text}」の占い結果はこちら！（ここに占いロジックを追加）")
-        )
+        # 認証済みの場合はジャンル選択受付中
+        if user_message in ['1', '2', '3', '4', '5', '6']:
+            genre_dict = {
+                '1': '恋愛運',
+                '2': '仕事運',
+                '3': '金運',
+                '4': '結婚',
+                '5': '未来の恋愛',
+                '6': '今日の運勢'
+            }
+            selected_genre = genre_dict[user_message]
+            # 占い結果はダミー文
+            result_text = f"【{selected_genre}】の占い結果：良い一日になるでしょう！"
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=result_text)
+            )
+            # ユーザー状態リセット（1回のみ有効）
+            del user_states[user_id]
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='ジャンルを1〜6の数字で選んでください。')
+            )
 
-def reply_genre_selection(event):
-    quick_reply_buttons = [
-        QuickReplyButton(action=MessageAction(label="恋愛運", text="恋愛運")),
-        QuickReplyButton(action=MessageAction(label="仕事運", text="仕事運")),
-        QuickReplyButton(action=MessageAction(label="金運", text="金運")),
-        QuickReplyButton(action=MessageAction(label="結婚", text="結婚")),
-        QuickReplyButton(action=MessageAction(label="未来の恋愛", text="未来の恋愛")),
-        QuickReplyButton(action=MessageAction(label="今日の運勢", text="今日の運勢"))
-    ]
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(
-            text="ジャンルを選んでください：",
-            quick_reply=QuickReply(items=quick_reply_buttons)
-        )
-    )
-
-def delete_password_from_github(used_password):
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    # 最新ファイル取得
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"Failed to fetch for delete: {response.status_code}, {response.text}")
-        return
-
-    data = response.json()
-    sha = data["sha"] if "sha" in data else None
-    content_json = json.loads(requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3.raw"}).text)
-
-    # 使用済パス削除
-    if used_password in content_json:
-        content_json.remove(used_password)
-
-    updated_content = json.dumps(content_json, ensure_ascii=False, indent=2)
-
-    update_data = {
-        "message": f"Remove used password {used_password}",
-        "content": updated_content.encode("utf-8").decode("utf-8"),
-        "sha": sha
-    }
-
-    put_response = requests.put(url, headers=headers, json=update_data)
-
-    if put_response.status_code not in [200, 201]:
-        print(f"Failed to update passwords.json: {put_response.status_code}, {put_response.text}")
-    else:
-        print(f"Password {used_password} removed successfully.")
+@app.route("/", methods=['GET'])
+def index():
+    return "LINE Tarot Bot is running."
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
