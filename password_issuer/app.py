@@ -1,36 +1,49 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template_string, jsonify
 import json
-import random
-import string
+import secrets
 import os
 
 app = Flask(__name__)
-PASSWORD_FILE = "passwords.json"
+
+# パスワードを保存するファイル
+PASSWORD_FILE = 'passwords.json'
+
+# HTMLテンプレート
+HTML_TEMPLATE = """
+<!doctype html>
+<html>
+  <head>
+    <title>パスワード発行フォーム</title>
+  </head>
+  <body>
+    <h1>あなたのパスワード</h1>
+    <p style="font-size: 24px; font-weight: bold;">{{ password }}</p>
+    <p>このパスワードをLINEに入力して占いを開始してください。</p>
+  </body>
+</html>
+"""
 
 def load_passwords():
     if os.path.exists(PASSWORD_FILE):
-        with open(PASSWORD_FILE, "r", encoding="utf-8") as f:
+        with open(PASSWORD_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return []
+    else:
+        return []
 
-def save_passwords(passwords):
-    with open(PASSWORD_FILE, "w", encoding="utf-8") as f:
-        json.dump(passwords, f, indent=2, ensure_ascii=False)
-
-def generate_password():
-    return "mem" + ''.join(random.choices(string.digits, k=4))
-
-@app.route("/generate", methods=["POST"])
-def generate():
+def save_password(password):
     passwords = load_passwords()
-    new_password = generate_password()
-    passwords.append({"password": new_password})
-    save_passwords(passwords)
-    return jsonify({"password": new_password})
+    passwords.append(password)
+    with open(PASSWORD_FILE, 'w', encoding='utf-8') as f:
+        json.dump(passwords, f, ensure_ascii=False, indent=2)
 
-@app.route("/")
+@app.route('/')
 def index():
-    return "パスワード発行サービスへようこそ"
+    # ランダムなパスワードを生成（例: mem1234）
+    password = f"mem{secrets.randbelow(9000) + 1000}"
+    save_password(password)
+    return render_template_string(HTML_TEMPLATE, password=password)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# Render対応（0.0.0.0バインディング）
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
