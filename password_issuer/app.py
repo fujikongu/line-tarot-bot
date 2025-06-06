@@ -1,49 +1,76 @@
-from flask import Flask, render_template_string, jsonify
+
+from flask import Flask, render_template_string, redirect
+import random
+import string
 import json
-import secrets
+import requests
 import os
+import base64
 
 app = Flask(__name__)
 
-# パスワードを保存するファイル
-PASSWORD_FILE = 'passwords.json'
+# GitHubの設定
+GITHUB_REPO = "fujikongu/line-tarot-bot"
+GITHUB_FILE_PATH = "passwords.json"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
+# パスワード生成関数
+def generate_password():
+    return "mem" + ''.join(random.choices(string.digits, k=4))
+
+# GitHub API経由でpasswords.jsonを更新する関数
+def update_passwords_json(new_password):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+
+    # 現在のファイル内容とSHA取得
+    r = requests.get(url, headers=headers)
+    if r.status_code != 200:
+        raise Exception(f"Failed to fetch file: {r.text}")
+
+    content = json.loads(r.text)
+    sha = content["sha"]
+    existing_data = json.loads(base64.b64decode(content["content"]).decode())
+
+    # 新パス追加
+    existing_data.append(new_password)
+
+    updated_content = base64.b64encode(json.dumps(existing_data).encode()).decode()
+
+    # GitHubへPUTで反映
+    payload = {
+        "message": f"Add new password {new_password}",
+        "content": updated_content,
+        "sha": sha
+    }
+    put = requests.put(url, headers=headers, json=payload)
+    if put.status_code not in [200, 201]:
+        raise Exception(f"Failed to update: {put.text}")
 
 # HTMLテンプレート
 HTML_TEMPLATE = """
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <title>パスワード発行フォーム</title>
-  </head>
-  <body>
-    <h1>あなたのパスワード</h1>
-    <p style="font-size: 24px; font-weight: bold;">{{ password }}</p>
+<head>
+    <meta charset="utf-8">
+    <title>占いパスワード発行</title>
+</head>
+<body>
+    <h2>あなたのパスワード</h2>
+    <p style="font-size: 24px;"><strong>{{ password }}</strong></p>
     <p>このパスワードをLINEに入力して占いを開始してください。</p>
-  </body>
+</body>
 </html>
 """
 
-def load_passwords():
-    if os.path.exists(PASSWORD_FILE):
-        with open(PASSWORD_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        return []
+@app.route("/")
+def issue_password():
+    new_pass = generate_password()
+    update_passwords_json(new_pass)
+    return render_template_string(HTML_TEMPLATE, password=new_pass)
 
-def save_password(password):
-    passwords = load_passwords()
-    passwords.append(password)
-    with open(PASSWORD_FILE, 'w', encoding='utf-8') as f:
-        json.dump(passwords, f, ensure_ascii=False, indent=2)
-
-@app.route('/')
-def index():
-    # ランダムなパスワードを生成（例: mem1234）
-    password = f"mem{secrets.randbelow(9000) + 1000}"
-    save_password(password)
-    return render_template_string(HTML_TEMPLATE, password=password)
-
-# Render対応（0.0.0.0バインディング）
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app.run(debug=True)
