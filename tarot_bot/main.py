@@ -1,77 +1,48 @@
 
 import os
 import json
-import base64
 import requests
 from flask import Flask, request, abort
 
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
 
-# 環境変数から各種トークンを取得
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+
+GITHUB_API_URL = os.getenv("GITHUB_API_URL")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
-# GitHub URL を設定
-GITHUB_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
-
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-# GitHubからpasswords.jsonを取得
 def get_passwords():
+    print(">>> GitHub API 呼び出し開始")
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.raw"
     }
-    response = requests.get(GITHUB_URL, headers=headers)
+    response = requests.get(GITHUB_API_URL, headers=headers)
+    print(f">>> GitHub API ステータスコード: {response.status_code}")
+    print(f">>> GitHub API レスポンス内容: {response.text[:200]}")
+
     if response.status_code == 200:
-        content_json = response.json()
-        content_encoded = content_json["content"]
-        content_decoded = base64.b64decode(content_encoded).decode("utf-8")
-        return json.loads(content_decoded)
+        return json.loads(response.text)
     else:
-        print(f"Failed to fetch passwords.json: {response.status_code}, {response.text}")
+        print(">>> GitHub API からパスワード取得失敗")
         return []
-
-# GitHubにpasswords.jsonを書き戻す
-def update_passwords(passwords):
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    # まず最新SHAを取得
-    get_response = requests.get(GITHUB_URL, headers=headers)
-    if get_response.status_code == 200:
-        sha = get_response.json()["sha"]
-    else:
-        print(f"Failed to get SHA: {get_response.status_code}, {get_response.text}")
-        return
-
-    # 更新する内容
-    updated_content = base64.b64encode(json.dumps(passwords, indent=2).encode("utf-8")).decode("utf-8")
-    data = {
-        "message": "Update passwords.json",
-        "content": updated_content,
-        "sha": sha
-    }
-    put_response = requests.put(GITHUB_URL, headers=headers, json=data)
-    if put_response.status_code not in [200, 201]:
-        print(f"Failed to update passwords.json: {put_response.status_code}, {put_response.text}")
 
 @app.route("/callback", methods=["POST"])
 def callback():
+    print(">>> /callback エンドポイントにリクエスト受信")
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
+    print(f">>> 受信 body: {body}")
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        print(">>> InvalidSignatureError 発生")
         abort(400)
 
     return "OK"
@@ -79,41 +50,22 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_message = event.message.text.strip()
+    print(f">>> ユーザーメッセージ: {user_message}")
 
     passwords = get_passwords()
+    print(f">>> 現在のパスワードリスト: {passwords}")
+
     if user_message in passwords:
-        # 正しいパスワード → 使用済みにする
-        passwords.remove(user_message)
-        update_passwords(passwords)
-
-        # ジャンル選択のクイックリプライ
-        reply_text = "ジャンルを選択してください。"
-        quick_reply_buttons = QuickReply(items=[
-            QuickReplyButton(action=MessageAction(label=genre, text=genre))
-            for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
-        ])
-
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=reply_text, quick_reply=quick_reply_buttons)
+            TextSendMessage(text="✅ パスワード認証成功 🎉")
         )
+        # GitHubのpasswords.json更新処理を本番ではここに入れる（省略）
     else:
-        # パスワードが違う or すでに使われた
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="パスワードを入力してください。\n例：mem1091")
+            TextSendMessage(text="パスワードを入力してください。\n例 : mem1091")
         )
-
-@app.route("/issue-password", methods=["GET"])
-def issue_password():
-    passwords = get_passwords()
-    if passwords:
-        new_password = passwords.pop(0)
-        update_passwords(passwords)
-        return f"Issued password: {new_password}"
-    else:
-        return "No passwords available.", 404
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=10000)
