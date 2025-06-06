@@ -10,7 +10,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickRepl
 
 app = Flask(__name__)
 
-# LINE Botのチャンネルアクセストークンとシークレット
+# LINE Botのチャネルアクセストークンとシークレット
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -18,11 +18,13 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-GITHUB_API_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
+# GitHubのpasswords.jsonのURL
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
+# GitHub から passwords.json を取得
 def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    r = requests.get(GITHUB_API_URL, headers=headers)
+    r = requests.get(PASSWORDS_URL, headers=headers)
     print(f"GitHub API status: {r.status_code}")
     r.raise_for_status()
     content = r.json()["content"]
@@ -39,6 +41,7 @@ def index():
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
+
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
@@ -61,7 +64,7 @@ def handle_message(event):
         return
 
     if user_message in passwords:
-        # 認証成功時 → ジャンル選択クイックリプライ
+        # 認証成功 → ジャンル選択クイックリプライ
         quick_reply_buttons = [
             QuickReplyButton(action=MessageAction(label=genre, text=genre))
             for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
@@ -69,15 +72,15 @@ def handle_message(event):
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text="✅ パスワード認証成功！ジャンルを選んでください：",
+                text="✅パスワード認証成功！ジャンルを選んでください。",
                 quick_reply=QuickReply(items=quick_reply_buttons)
             )
         )
     else:
-        # 認証失敗時
+        # 認証失敗
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="パスワードを入力してください。\n例：mem1091")
+            TextSendMessage(text="❌パスワードを入力してください。\n例：mem1091")
         )
 
 if __name__ == "__main__":
