@@ -53,7 +53,10 @@ def handle_message(event):
     user_message = event.message.text.strip()
     print(f">>> ユーザーメッセージ受信: {user_message}")
 
+    # 強制的に get_passwords() 呼び出し
     passwords, etag = get_passwords()
+    print(f">>> passwords の件数: {len(passwords)}")
+
     if not passwords:
         line_bot_api.reply_message(
             event.reply_token,
@@ -63,7 +66,6 @@ def handle_message(event):
 
     # パスワード認証処理
     for pw_entry in passwords:
-        # print 各エントリ確認用
         print(f">>> Checking pw_entry: {pw_entry}")
         if pw_entry.get("password") == user_message and pw_entry.get("used") == False:
             # 認証成功 → used: true に更新 (※ 今は更新せず確認だけ）
