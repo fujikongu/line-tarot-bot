@@ -19,11 +19,15 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 def get_passwords():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(GITHUB_API_URL, headers=headers)
+    print(f"GitHub API response status: {response.status_code}")
+    print(f"GitHub API response content: {response.text}")
     if response.status_code == 200:
         content = response.json()["content"]
         import base64
         decoded_content = base64.b64decode(content).decode("utf-8")
-        return json.loads(decoded_content)
+        passwords = json.loads(decoded_content)
+        print(f"Loaded passwords: {passwords}")
+        return passwords
     else:
         print(f"Failed to fetch passwords.json: {response.status_code} {response.text}")
         return []
