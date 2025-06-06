@@ -2,39 +2,36 @@
 import os
 import json
 import requests
+import base64
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+# LINE Botのチャンネルアクセストークンとシークレット
+YOUR_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+YOUR_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-# GitHubリポジトリの情報
+line_bot_api = LineBotApi(YOUR_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(YOUR_CHANNEL_SECRET)
+
+# GitHub情報
 GITHUB_API_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
 
-def get_passwords():
+def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(GITHUB_API_URL, headers=headers)
-    print(f"GitHub API response status: {response.status_code}")
-    print(f"GitHub API response content: {response.text}")
-    if response.status_code == 200:
-        content = response.json()["content"]
-        import base64
-        decoded_content = base64.b64decode(content).decode("utf-8")
-        passwords = json.loads(decoded_content)
-        print(f"Loaded passwords: {passwords}")
-        return passwords
-    else:
-        print(f"Failed to fetch passwords.json: {response.status_code} {response.text}")
-        return []
+    response.raise_for_status()
+    content = response.json()["content"]
+    decoded_content = base64.b64decode(content).decode("utf-8")
+    return json.loads(decoded_content)
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
-    return "LINE Bot is running."
+    return "LINE Tarot Bot is running."
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -48,45 +45,38 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_id = event.source.user_id
-    text = event.message.text.strip()
+    user_message = event.message.text.strip()
 
-    # 現在のパスワードリストをGitHubから取得
-    passwords = get_passwords()
+    if user_message.startswith("mem"):
+        try:
+            passwords = get_passwords_from_github()
+            print(f"[DEBUG] 現在のパスワードリスト: {passwords}")
 
-    # セッション管理用に仮のユーザーステート管理（メモリ上のみ簡易実装）
-    if not hasattr(app, "user_states"):
-        app.user_states = {}
-
-    user_state = app.user_states.get(user_id, "waiting_for_password")
-
-    if user_state == "waiting_for_password":
-        if text in passwords:
-            app.user_states[user_id] = "waiting_for_genre"
-            quick_reply_buttons = [
-                QuickReplyButton(action=MessageAction(label=genre, text=genre))
-                for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
-            ]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text="ジャンルを選んでください：",
-                    quick_reply=QuickReply(items=quick_reply_buttons)
+            if user_message in passwords:
+                # パスワード一致時の処理
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="✅ パスワード認証成功！ジャンルを選んでください：\n1️⃣ 恋愛運\n2️⃣ 仕事運\n3️⃣ 金運\n4️⃣ 結婚\n5️⃣ 未来の恋愛\n6️⃣ 今日の運勢")
                 )
-            )
-        else:
+            else:
+                # パスワード不一致
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="パスワードを入力してください。\n例：mem1091")
+                )
+        except Exception as e:
+            print(f"[ERROR] GitHubからパスワード取得失敗: {e}")
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="パスワードを入力してください。\n例：mem1091")
+                TextSendMessage(text="パスワード取得エラーが発生しました。時間をおいてお試しください。")
             )
-    elif user_state == "waiting_for_genre":
-        # ジャンル選択後の仮応答（ここに占い結果を入れる処理を実装可能）
+    else:
+        # 通常メッセージ処理（パスワード入力待ち）
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=f"「{text}」の占い結果は近日公開予定です。")
+            TextSendMessage(text="パスワードを入力してください。\n例：mem1091")
         )
-        # 一度ジャンル選択後はリセットして再度パスワード待ちに戻す
-        app.user_states[user_id] = "waiting_for_password"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
