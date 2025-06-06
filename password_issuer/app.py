@@ -1,99 +1,90 @@
 
-from flask import Flask, render_template_string
-import requests
 import json
 import random
 import string
+import requests
 import os
+from flask import Flask, request
 
 app = Flask(__name__)
 
-# GitHub API設定
-url = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
-token = os.getenv("GITHUB_TOKEN")
+# 環境変数から読み込み
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+REPO_OWNER = 'fujikongu'
+REPO_NAME = 'line-tarot-bot'
+FILE_PATH = 'password_issuer/passwords.json'
 
-headers = {
-    "Authorization": f"token {token}",
-    "Accept": "application/vnd.github.v3+json"
-}
-
-# HTMLテンプレート
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>パスワード発行</title>
-</head>
-<body>
-    {% if password %}
-        <h2>あなたのパスワード</h2>
-        <p><strong>{{ password }}</strong></p>
-        <p>このパスワードをLINEに入力して占いを開始してください。</p>
-    {% else %}
-        <p>Password Issuer is running.</p>
-    {% endif %}
-</body>
-</html>
-"""
-
-# パスワード生成
-def generate_password(length=8):
-    return "mem" + ''.join(random.choices(string.digits, k=length - 3))
-
-# GitHubからpasswords.json取得
 def get_passwords_json():
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     r = requests.get(url, headers=headers)
     if r.status_code == 200:
-        content = r.json()["content"]
-        encoding = r.json()["encoding"]
-        if encoding == "base64":
+        content = r.json()
+        file_content = content['content']
+        encoding = content['encoding']
+        if encoding == 'base64':
             import base64
-            decoded = base64.b64decode(content).decode("utf-8")
-            return json.loads(decoded), r.json()["sha"]
-        elif r.status_code == 404:
-            return [], None
-        else:
-            raise Exception(f"Failed to fetch file: {r.text}")
-    elif r.status_code == 404:
-        # ファイルがない場合は新規作成扱い
-        return [], None
-    else:
-        raise Exception(f"Failed to fetch file: {r.text}")
+            decoded_content = base64.b64decode(file_content).decode('utf-8')
+            return json.loads(decoded_content), content['sha']
+    raise Exception(f'Failed to fetch file: {r.text}')
 
-# GitHubにpasswords.json更新
-def update_passwords_json(new_password):
+def update_passwords_json(new_pass):
     passwords, sha = get_passwords_json()
-    passwords.append(new_password)
-    updated_content = json.dumps(passwords, ensure_ascii=False, indent=2)
+    # ★ 修正 → 辞書型で追加
+    passwords.append({
+        "password": new_pass,
+        "used": False
+    })
 
+    updated_content = json.dumps(passwords, indent=4)
     import base64
-    b64_content = base64.b64encode(updated_content.encode()).decode()
+    encoded_content = base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
 
-    data = {
-        "message": "Update passwords.json",
-        "content": b64_content,
-        "branch": "main"
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
     }
-    if sha:
-        data["sha"] = sha
-
-    r = requests.put(url, headers=headers, data=json.dumps(data))
+    data = {
+        'message': 'Update passwords.json',
+        'content': encoded_content,
+        'sha': sha
+    }
+    r = requests.put(url, headers=headers, json=data)
     if r.status_code not in [200, 201]:
-        raise Exception(f"Failed to update file: {r.text}")
+        raise Exception(f'Failed to update file: {r.text}')
 
-# ルート
-@app.route("/")
-def index():
-    return render_template_string(HTML_TEMPLATE, password=None)
+def generate_password():
+    prefix = 'mem'
+    suffix = ''.join(random.choices(string.digits, k=4))
+    return prefix + suffix
 
-# パスワード発行
-@app.route("/issue-password")
+# --- ルート定義 ---
+@app.route('/')
+def home():
+    return "Password Issuer is running."
+
+@app.route('/issue-password', methods=['GET'])
+def issue_password_page():
+    return """
+        <h1>パスワード発行</h1>
+        <form method="post" action="/issue-password">
+            <button type="submit">発行する</button>
+        </form>
+    """
+
+@app.route('/issue-password', methods=['POST'])
 def issue_password():
     new_pass = generate_password()
     update_passwords_json(new_pass)
-    return render_template_string(HTML_TEMPLATE, password=new_pass)
+    return f"""
+        <h1>あなたのパスワード</h1>
+        <p><b>{new_pass}</b></p>
+        <p>このパスワードをLINEに入力して占いを開始してください。</p>
+    """
 
-# main
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
