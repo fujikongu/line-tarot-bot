@@ -1,55 +1,30 @@
 
+import os
+import json
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import json
-import os
-import github
-import random
 
 app = Flask(__name__)
 
-# 環境変数からLINEアクセストークンとシークレットを取得
-line_bot_api = LineBotApi(os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.environ.get("LINE_CHANNEL_SECRET"))
+# 環境変数からキーを取得
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-# トップページ確認用
-@app.route('/')
-def index():
-    return 'Your service is running!'
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# パスワード発行用
-@app.route('/issue-password')
-def issue_password():
-    # GitHubリポジトリの情報
-    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-    REPO_NAME = "fujikongu/line-tarot-bot"
-    FILE_PATH = "password_issuer/passwords.json"
+# GitHubのpasswords.jsonのURL
+PASSWORDS_URL = "https://raw.githubusercontent.com/fujikongu/line-tarot-bot/main/password_issuer/passwords.json"
 
-    # ランダムなパスワード生成
-    new_password = f"mem{random.randint(10000, 99999)}"
+# 使用済みパスワードを記録する（メモリ保持の簡易版）
+used_passwords = set()
 
-    # GitHubに接続
-    g = github.Github(GITHUB_TOKEN)
-    repo = g.get_repo(REPO_NAME)
-    contents = repo.get_contents(FILE_PATH)
-    passwords = json.loads(contents.decoded_content.decode())
-
-    # 新しいパスワードをリストに追加
-    passwords.append(new_password)
-
-    # 更新内容をコミット
-    repo.update_file(contents.path, "Update passwords.json", json.dumps(passwords, indent=4), contents.sha)
-
-    return f"New password issued: {new_password}"
-
-# LINEのコールバック処理
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
 
     try:
         handler.handle(body, signature)
@@ -58,37 +33,51 @@ def callback():
 
     return 'OK'
 
-# メッセージイベントの処理
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_message = event.message.text
+    user_message = event.message.text.strip()
 
-    # GitHub上の passwords.json を読み込む
-    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-    REPO_NAME = "fujikongu/line-tarot-bot"
-    FILE_PATH = "password_issuer/passwords.json"
+    # パスワード一覧をGitHubから取得
+    try:
+        import requests
+        response = requests.get(PASSWORDS_URL)
+        passwords = response.json()
+    except Exception as e:
+        print(f"Error loading passwords: {e}")
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="エラーが発生しました。しばらくしてからお試しください。")
+        )
+        return
 
-    g = github.Github(GITHUB_TOKEN)
-    repo = g.get_repo(REPO_NAME)
-    contents = repo.get_contents(FILE_PATH)
-    valid_passwords = json.loads(contents.decoded_content.decode())
+    # 認証チェック
+    if user_message in passwords:
+        if user_message in used_passwords:
+            # すでに使用済み
+            reply_text = "このパスワードはすでに使用されています。新しいパスワードを購入してください。"
+        else:
+            # 初回利用 → 使用済みに記録
+            used_passwords.add(user_message)
 
-    if user_message in valid_passwords:
-        # 認証成功 → パスワードを削除
-        valid_passwords.remove(user_message)
-        repo.update_file(contents.path, "Remove used password", json.dumps(valid_passwords, indent=4), contents.sha)
-
-        # ここは仮の成功メッセージ
-        reply_text = "✅ パスワード認証成功！これから占いを始めます。"
+            # ここに占い結果を返信（テスト版の固定メッセージ）
+            reply_text = (
+                "🎴 タロット占い結果 🎴\n\n"
+                "1枚目：過去 → 太陽（正位置）\n"
+                "2枚目：現在 → 月（逆位置）\n"
+                "3枚目：未来 → 世界（正位置）\n"
+                "4枚目：アドバイス → 星（正位置）\n"
+                "5枚目：結果 → 力（正位置）\n\n"
+                "✨ あなたの未来には明るい兆しが見えています。今は希望を持って進んでください！✨"
+            )
     else:
-        reply_text = "パスワードを入力してください。\n例：mem1091"
+        reply_text = "パスワードを入力してください。\n例 : mem1091"
 
-    # LINEに返信
+    # 返信を送信
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply_text)
     )
 
-# アプリ起動
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
