@@ -25,59 +25,13 @@ def get_passwords():
     }
     response = requests.get(GITHUB_API_URL, headers=headers)
     print(f">>> GitHub API ステータスコード: {response.status_code}")
-    print(f">>> GitHub API レスポンス内容: {response.text[:200]}")
+    print(f">>> GitHub API レスポンス内容: {response.text[:500]}")
 
     if response.status_code == 200:
         return json.loads(response.text), response.headers.get("ETag")
     else:
         print(">>> GitHub API からパスワード取得失敗")
         return [], None
-
-# GitHub に passwords.json を更新
-def update_passwords(passwords, etag):
-    print(">>> GitHub API 更新開始")
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json"
-    }
-
-    # 現在の passwords.json を base64 エンコードして送信
-    get_response = requests.get(GITHUB_API_URL, headers=headers)
-    if get_response.status_code != 200:
-        print(">>> GitHub API GET失敗")
-        return False
-
-    sha = get_response.json()["sha"]
-
-    updated_content = json.dumps(passwords, ensure_ascii=False, indent=4)
-    encoded_content = updated_content.encode("utf-8")
-    base64_content = base64.b64encode(encoded_content).decode("utf-8")
-
-    data = {
-        "message": "Update passwords.json (used flag)",
-        "content": base64_content,
-        "sha": sha
-    }
-
-    put_response = requests.put(GITHUB_API_URL, headers=headers, data=json.dumps(data))
-    print(f">>> GitHub API PUT ステータスコード: {put_response.status_code}")
-    return put_response.status_code == 200 or put_response.status_code == 201
-
-# ジャンル選択用 QuickReply を作成
-def create_genre_quick_reply():
-    genres = [
-        "恋愛運",
-        "仕事運",
-        "金運",
-        "今日の運勢",
-        "結婚",
-        "未来の恋愛"
-    ]
-    quick_reply_buttons = [
-        QuickReplyButton(action=MessageAction(label=genre, text=genre)) for genre in genres
-    ]
-    return QuickReply(items=quick_reply_buttons)
 
 # Webhook エンドポイント
 @app.route("/callback", methods=["POST"])
@@ -109,20 +63,19 @@ def handle_message(event):
 
     # パスワード認証処理
     for pw_entry in passwords:
-        if pw_entry["password"] == user_message and pw_entry.get("used") == False:
-            # 認証成功 → used: true に更新
+        # print 各エントリ確認用
+        print(f">>> Checking pw_entry: {pw_entry}")
+        if pw_entry.get("password") == user_message and pw_entry.get("used") == False:
+            # 認証成功 → used: true に更新 (※ 今は更新せず確認だけ）
             pw_entry["used"] = True
-            update_passwords(passwords, etag)
-
-            # ジャンル選択を送信
+            # 通知送信
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="占いたいジャンルを選んでください。",
-                    quick_reply=create_genre_quick_reply()
+                    text="認証成功！ジャンル選択画面はまだ準備中です（デバッグ中）"
                 )
             )
-            print(">>> 認証成功 → ジャンル選択画面を送信")
+            print(">>> 認証成功！")
             return
 
     # 認証失敗
