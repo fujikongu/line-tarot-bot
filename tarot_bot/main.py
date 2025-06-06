@@ -1,38 +1,43 @@
-import os
-import sys
-import json
-from flask import Flask, request, abort
 
+import os
+import json
+import requests
+import base64
+from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import FollowEvent, UnfollowEvent, JoinEvent, LeaveEvent
 
-# 環境変数からトークンとシークレットを取得
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
-LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
+app = Flask(__name__)
 
-if LINE_CHANNEL_ACCESS_TOKEN is None or LINE_CHANNEL_SECRET is None:
-    print('環境変数が設定されていません。', file=sys.stderr)
-    sys.exit(1)
+# LINE Botのチャネルアクセストークンとシークレット
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# Flaskアプリを作成
-app = Flask(__name__)
+# GitHubのpasswords.jsonのURL
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-# ルート確認用（GETでアクセスされた時）
-@app.route("/", methods=['GET'])
-def index():
-    return "LINE Tarot Bot is running."
+# GitHub から passwords.json を取得
+def get_passwords():
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(PASSWORDS_URL, headers=headers)
+    if response.status_code == 200:
+        content = json.loads(response.text)
+        file_content = base64.b64decode(content["content"]).decode("utf-8")
+        return json.loads(file_content)
+    else:
+        print(f"Error fetching passwords.json: {response.status_code}")
+        return {}
 
-# LINE Webhook用のエンドポイント
+# Webhookエンドポイント
 @app.route("/callback", methods=['POST'])
 def callback():
-    # X-Line-Signature ヘッダー値を取得
     signature = request.headers['X-Line-Signature']
-
-    # リクエストボディ（JSON形式）を取得
     body = request.get_data(as_text=True)
 
     try:
@@ -42,17 +47,39 @@ def callback():
 
     return 'OK'
 
-# メッセージ受信時の処理
+# メッセージ受信時
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_message = event.message.text
-    reply_message = f"あなたのメッセージ: {user_message}"
-
+    reply_text = f"受け付けました: {user_message}"
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(text=reply_message)
+        TextSendMessage(text=reply_text)
     )
 
-# アプリを起動
+# FollowEvent 対応
+@handler.add(FollowEvent)
+def handle_follow(event):
+    print("FollowEvent received.")
+    return
+
+# UnfollowEvent 対応
+@handler.add(UnfollowEvent)
+def handle_unfollow(event):
+    print("UnfollowEvent received.")
+    return
+
+# JoinEvent 対応
+@handler.add(JoinEvent)
+def handle_join(event):
+    print("JoinEvent received.")
+    return
+
+# LeaveEvent 対応
+@handler.add(LeaveEvent)
+def handle_leave(event):
+    print("LeaveEvent received.")
+    return
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host='0.0.0.0', port=int(os.getenv("PORT", 10000)))
