@@ -1,92 +1,65 @@
+
 import os
 import json
-import random
-import string
-import base64
 import requests
-from flask import Flask, request, render_template_string
+import base64
+import random
+from flask import Flask
 
 app = Flask(__name__)
 
-# 環境変数
+# GitHub トークンと URL
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO_URL = os.getenv("GITHUB_REPO_URL")
+GITHUB_REPO_URL = "https://github.com/fujikongu/line-tarot-bot"
+PASSWORDS_JSON_URL = GITHUB_REPO_URL.replace("github.com", "api.github.com/repos") + "/contents/password_issuer/passwords.json"
 
-# GitHub API用URLに変換
-GITHUB_API_URL = GITHUB_REPO_URL.replace("https://github.com/", "https://api.github.com/repos/")
-PASSWORDS_JSON_URL = GITHUB_API_URL + "/contents/password_issuer/passwords.json"
-
-# HTMLテンプレート
-HTML_TEMPLATE = """
-<!doctype html>
-<title>Issue Password</title>
-<h1>Issue Random Password</h1>
-<form method="post">
-    <button type="submit">Issue Password</button>
-</form>
-{% if password %}
-    <p>Issued Password: <strong>{{ password }}</strong></p>
-{% endif %}
-"""
-
-# GitHubからpasswords.jsonを取得
+# GitHub から passwords.json を取得
 def get_passwords():
-    headers = {"Authorization": f"token {GITHUB_TOKEN}" }
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     r = requests.get(PASSWORDS_JSON_URL, headers=headers)
     r.raise_for_status()
     content = r.json()["content"]
-    decoded = base64.b64decode(content).decode("utf-8")
-    return json.loads(decoded), r.json()["sha"]
+    decoded_content = base64.b64decode(content).decode("utf-8")
+    return json.loads(decoded_content), r.json()["sha"]
 
-# GitHubにpasswords.jsonをアップロード
+# GitHub に passwords.json を更新
 def update_passwords(passwords, sha):
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Content-Type": "application/json"
     }
-    updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
+    new_content = base64.b64encode(json.dumps(passwords, indent=2).encode("utf-8")).decode("utf-8")
     data = {
         "message": "Add new password",
-        "content": updated_content,
+        "content": new_content,
         "sha": sha
     }
     r = requests.put(PASSWORDS_JSON_URL, headers=headers, data=json.dumps(data))
     r.raise_for_status()
 
-# ランダムパスワード生成 (mem + 4桁数字)
+# ランダムパスワード生成
 def generate_password():
-    return "mem" + ''.join(random.choices(string.digits, k=4))
+    return f"mem{random.randint(1000, 9999)}"
 
-@app.route("/issue-password", methods=["GET", "POST"])
+@app.route("/issue-password", methods=["GET"])
 def issue_password():
-    password = None
-
-    if request.method == "POST":
-        # パスワード生成
+    try:
+        passwords, sha = get_passwords()
         new_password = generate_password()
 
-        try:
-            passwords, sha = get_passwords()
-        except Exception as e:
-            return f"Failed to load passwords.json: {e}", 500
+        # すでに存在しないか確認（重複防止）
+        while new_password in passwords:
+            new_password = generate_password()
 
-        # 既に存在しないか確認して追加
-        if new_password not in passwords:
-            passwords.append(new_password)
+        # 追加
+        passwords.append(new_password)
+        update_passwords(passwords, sha)
 
-            try:
-                update_passwords(passwords, sha)
-                password = new_password
-            except Exception as e:
-                return f"Failed to update passwords.json: {e}", 500
-        else:
-            password = "(duplicate skipped, try again)"
+        return f"発行パスワード: {new_password}"
 
-    return render_template_string(HTML_TEMPLATE, password=password)
-
-@app.route("/")
-def index():
-    return "Password Issuer is running."
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        return f"エラーが発生しました: {e}"
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
