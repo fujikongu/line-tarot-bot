@@ -3,153 +3,89 @@ import os
 import json
 import requests
 import base64
-from flask import Flask, request, abort, render_template_string
-
+from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-
-from genre_handlers import send_genre_selection
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
 app = Flask(__name__)
 
+# 環境変数から取得
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO_URL = os.getenv("GITHUB_REPO_URL")
-PASSWORDS_JSON_URL = GITHUB_REPO_URL.replace("github.com", "api.github.com/repos") + "/contents/password_issuer/passwords.json"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# ------------------- Password Issuer Functions -------------------
+# GitHub passwords.json URL
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Issue Password</title>
-</head>
-<body>
-    <h1>Issue Password</h1>
-    <form method="POST">
-        <label for="password">Password:</label>
-        <input type="text" id="password" name="password" required>
-        <button type="submit">Issue</button>
-    </form>
-    {% if message %}
-    <p>{{ message }}</p>
-    {% endif %}
-</body>
-</html>
-"""
-
-def get_passwords_file():
+# GitHub から passwords.json を取得
+def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    response = requests.get(PASSWORDS_JSON_URL, headers=headers)
-    response.raise_for_status()
-    content = response.json()
-    file_sha = content["sha"]
-    file_content = json.loads(requests.get(content["download_url"]).text)
-    return file_content, file_sha
+    r = requests.get(PASSWORDS_URL, headers=headers)
+    print(f"GitHub API status: {r.status_code}")
+    r.raise_for_status()
+    content = r.json()["content"]
+    decoded_content = base64.b64decode(content).decode("utf-8")
+    passwords_data = json.loads(decoded_content)
+    print(f"Loaded passwords: {passwords_data}")
+    return passwords_data
 
-def update_passwords_file(passwords, sha):
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    message = "Update passwords.json"
-    updated_content = json.dumps(passwords, indent=4)
-    b64_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
+@app.route("/", methods=["GET"])
+def index():
+    return "LINE Tarot Bot is running."
 
-    response = requests.put(
-        PASSWORDS_JSON_URL,
-        headers=headers,
-        json={
-            "message": message,
-            "content": b64_content,
-            "sha": sha
-        }
-    )
-    response.raise_for_status()
-
-@app.route("/issue-password", methods=["GET", "POST"])
-def issue_password():
-    message = None
-    if request.method == "POST":
-        new_password = request.form["password"]
-        try:
-            passwords, sha = get_passwords_file()
-            if new_password not in passwords:
-                passwords.append(new_password)
-                update_passwords_file(passwords, sha)
-                message = f"Password '{new_password}' issued successfully."
-            else:
-                message = f"Password '{new_password}' already exists."
-        except Exception as e:
-            message = f"Error: {str(e)}"
-
-    return render_template_string(HTML_TEMPLATE, message=message)
-
-# ------------------- LINE Bot Functions -------------------
-
-def get_valid_passwords():
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-    response = requests.get(PASSWORDS_JSON_URL, headers=headers)
-    if response.status_code == 200:
-        return json.loads(response.text)
-    else:
-        print(f"Failed to fetch passwords.json: {response.status_code}")
-        return {}
-
-used_passwords = []
-
-@app.route("/callback", methods=['POST'])
+@app.route("/callback", methods=["POST"])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-
-    return 'OK'
+    return "OK"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_message = event.message.text.strip()
-    valid_passwords = get_valid_passwords()
-    user_id = user_message
 
-    if user_id in valid_passwords and user_id not in used_passwords:
-        used_passwords.append(user_id)
+    try:
+        passwords_data = get_passwords_from_github()
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch passwords.json: {e}")
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=f"受付けました: {user_message}")
+            TextSendMessage(text="パスワード取得エラーが発生しました。しばらくしてからお試しください。")
         )
-        send_genre_selection(event)
+        return
 
-    elif user_id in used_passwords:
+    # 有効なパスワード一覧（used: false のもの）
+    valid_passwords = [entry["password"] for entry in passwords_data if not entry.get("used", True)]
+    print(f"Valid passwords: {valid_passwords}")
+
+    if user_message in valid_passwords:
+        # 認証成功 → ジャンル選択
+        quick_reply_buttons = [
+            QuickReplyButton(action=MessageAction(label=genre, text=genre))
+            for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
+        ]
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="このパスワードはすでに使用されています。")
+            TextSendMessage(
+                text="✅パスワード認証成功！ジャンルを選んでください。",
+                quick_reply=QuickReply(items=quick_reply_buttons)
+            )
         )
     else:
+        # 認証失敗
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="無効なパスワードです。")
+            TextSendMessage(text="❌無効なパスワードです。")
         )
 
-# ------------------- Default route -------------------
-@app.route("/")
-def index():
-    return "LINE Tarot Bot & Password Issuer is running."
-
-# ------------------- Main -------------------
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
