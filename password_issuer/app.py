@@ -1,90 +1,91 @@
 
-import json
-import random
-import string
-import requests
 import os
-from flask import Flask, request
+import json
+import requests
+from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# 環境変数から読み込み
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-REPO_OWNER = 'fujikongu'
-REPO_NAME = 'line-tarot-bot'
-FILE_PATH = 'password_issuer/passwords.json'
+# 環境変数から GitHub Token と Repo URL を取得
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO_URL = os.getenv("GITHUB_REPO_URL")
 
-def get_passwords_json():
-    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}'
+# GitHub API 用 URL を組み立て
+GITHUB_API_URL = GITHUB_REPO_URL.replace("https://github.com/", "https://api.github.com/repos/")
+PASSWORDS_JSON_URL = GITHUB_API_URL + "/contents/password_issuer/passwords.json"
+
+# HTML フォームテンプレート
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Issue Password</title>
+</head>
+<body>
+    <h1>Issue Password</h1>
+    <form method="POST">
+        <label for="password">Password:</label>
+        <input type="text" id="password" name="password" required>
+        <button type="submit">Issue</button>
+    </form>
+    {% if message %}
+    <p>{{ message }}</p>
+    {% endif %}
+</body>
+</html>
+"""
+
+def get_passwords_file():
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(PASSWORDS_JSON_URL, headers=headers)
+    response.raise_for_status()
+    content = response.json()
+    file_sha = content["sha"]
+    file_content = json.loads(requests.get(content["download_url"]).text)
+    return file_content, file_sha
+
+def update_passwords_file(passwords, sha):
     headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
-    r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        content = r.json()
-        file_content = content['content']
-        encoding = content['encoding']
-        if encoding == 'base64':
-            import base64
-            decoded_content = base64.b64decode(file_content).decode('utf-8')
-            return json.loads(decoded_content), content['sha']
-    raise Exception(f'Failed to fetch file: {r.text}')
-
-def update_passwords_json(new_pass):
-    passwords, sha = get_passwords_json()
-    # ★ 修正 → 辞書型で追加
-    passwords.append({
-        "password": new_pass,
-        "used": False
-    })
-
+    message = "Update passwords.json"
     updated_content = json.dumps(passwords, indent=4)
     import base64
-    encoded_content = base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
+    b64_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
 
-    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}'
-    headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
-    }
-    data = {
-        'message': 'Update passwords.json',
-        'content': encoded_content,
-        'sha': sha
-    }
-    r = requests.put(url, headers=headers, json=data)
-    if r.status_code not in [200, 201]:
-        raise Exception(f'Failed to update file: {r.text}')
+    response = requests.put(
+        PASSWORDS_JSON_URL,
+        headers=headers,
+        json={
+            "message": message,
+            "content": b64_content,
+            "sha": sha
+        }
+    )
+    response.raise_for_status()
 
-def generate_password():
-    prefix = 'mem'
-    suffix = ''.join(random.choices(string.digits, k=4))
-    return prefix + suffix
-
-# --- ルート定義 ---
-@app.route('/')
-def home():
-    return "Password Issuer is running."
-
-@app.route('/issue-password', methods=['GET'])
-def issue_password_page():
-    return """
-        <h1>パスワード発行</h1>
-        <form method="post" action="/issue-password">
-            <button type="submit">発行する</button>
-        </form>
-    """
-
-@app.route('/issue-password', methods=['POST'])
+@app.route("/issue-password", methods=["GET", "POST"])
 def issue_password():
-    new_pass = generate_password()
-    update_passwords_json(new_pass)
-    return f"""
-        <h1>あなたのパスワード</h1>
-        <p><b>{new_pass}</b></p>
-        <p>このパスワードをLINEに入力して占いを開始してください。</p>
-    """
+    message = None
+    if request.method == "POST":
+        new_password = request.form["password"]
+        try:
+            passwords, sha = get_passwords_file()
+            if new_password not in passwords:
+                passwords.append(new_password)
+                update_passwords_file(passwords, sha)
+                message = f"Password '{new_password}' issued successfully."
+            else:
+                message = f"Password '{new_password}' already exists."
+        except Exception as e:
+            message = f"Error: {str(e)}"
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+    return render_template_string(HTML_TEMPLATE, message=message)
+
+@app.route("/")
+def index():
+    return "Password Issuer App is running."
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
