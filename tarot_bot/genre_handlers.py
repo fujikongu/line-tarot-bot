@@ -27,9 +27,9 @@ def send_genre_selection(event, line_bot_api):
         )
     )
 
-# 占い結果送信
-def send_tarot_reading(event, line_bot_api, selected_genre):
-    genre_file = GENRE_FILE_MAP.get(selected_genre)
+# タロット診断結果送信
+def send_tarot_reading(event, genre, line_bot_api):
+    genre_file = GENRE_FILE_MAP.get(genre)
     if not genre_file:
         line_bot_api.reply_message(
             event.reply_token,
@@ -52,7 +52,7 @@ def send_tarot_reading(event, line_bot_api, selected_genre):
     selected_cards = random.sample(tarot_template, 5)
 
     # 結果メッセージ構築
-    result_message = f"🔮【{selected_genre}】占い結果🔮\n\n"
+    result_message = f"🔮【{genre}】占い結果🔮\n\n"
     for i, card in enumerate(selected_cards, 1):
         result_message += f"{i}. {card['name']} ({card['position']})\n→ {card['meaning']}\n\n"
 
