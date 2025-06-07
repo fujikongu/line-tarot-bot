@@ -5,7 +5,7 @@ import requests
 import base64
 import random
 import string
-from flask import Flask, request, render_template_string
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -16,27 +16,6 @@ GITHUB_REPO_URL = os.getenv("GITHUB_REPO_URL")
 # GitHub API 用 URL を組み立て
 GITHUB_API_URL = GITHUB_REPO_URL.replace("https://github.com/", "https://api.github.com/repos/")
 PASSWORDS_JSON_URL = GITHUB_API_URL + "/contents/password_issuer/passwords.json"
-
-# HTML フォームテンプレート
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Issue Password</title>
-</head>
-<body>
-    <h1>Issue Password</h1>
-    <form method="POST">
-        <label for="password">Password:</label>
-        <input type="text" id="password" name="password" required>
-        <button type="submit">Issue</button>
-    </form>
-    {% if message %}
-    <p>{{ message }}</p>
-    {% endif %}
-</body>
-</html>
-"""
 
 def get_passwords_file():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
@@ -67,44 +46,23 @@ def update_passwords_file(passwords, sha):
     )
     response.raise_for_status()
 
-# 手入力フォーム
-@app.route("/issue-password", methods=["GET", "POST"])
-def issue_password():
-    message = None
-    if request.method == "POST":
-        new_password = request.form["password"]
-        try:
-            passwords, sha = get_passwords_file()
-            if new_password not in passwords:
-                passwords.append(new_password)
-                update_passwords_file(passwords, sha)
-                message = f"Password '{new_password}' issued successfully."
-            else:
-                message = f"Password '{new_password}' already exists."
-        except Exception as e:
-            message = f"Error: {str(e)}"
-
-    return render_template_string(HTML_TEMPLATE, message=message)
-
-# ランダムパスワード自動発行
-@app.route('/issue-password-auto', methods=['GET'])
+@app.route("/issue-password-auto", methods=["GET"])
 def issue_password_auto():
-    new_password = 'mem' + ''.join(random.choices(string.digits, k=4))
+    new_password = "mem" + "".join(random.choices(string.digits, k=4))
     try:
         passwords, sha = get_passwords_file()
         if new_password not in passwords:
             passwords.append(new_password)
             update_passwords_file(passwords, sha)
-            return f'発行されたパス: {new_password}'
+            return f"✅ 発行されたパス: {new_password}"
         else:
-            return f'発行失敗: 既に存在するパス "{new_password}"'
+            return f"⚠️ 発行失敗: 既に存在するパス '{new_password}'"
     except Exception as e:
-        return f'Error: {str(e)}'
+        return f"Error: {str(e)}"
 
-# デフォルトルート
 @app.route("/")
 def index():
-    return "Password Issuer App with Auto Issue is running."
+    return "Password Issuer App (ランダム発行版) is running."
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
