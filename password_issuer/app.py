@@ -2,6 +2,9 @@
 import os
 import json
 import requests
+import base64
+import random
+import string
 from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
@@ -51,7 +54,6 @@ def update_passwords_file(passwords, sha):
     }
     message = "Update passwords.json"
     updated_content = json.dumps(passwords, indent=4)
-    import base64
     b64_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
 
     response = requests.put(
@@ -65,6 +67,7 @@ def update_passwords_file(passwords, sha):
     )
     response.raise_for_status()
 
+# 手入力フォーム
 @app.route("/issue-password", methods=["GET", "POST"])
 def issue_password():
     message = None
@@ -83,9 +86,25 @@ def issue_password():
 
     return render_template_string(HTML_TEMPLATE, message=message)
 
+# ランダムパスワード自動発行
+@app.route('/issue-password-auto', methods=['GET'])
+def issue_password_auto():
+    new_password = 'mem' + ''.join(random.choices(string.digits, k=4))
+    try:
+        passwords, sha = get_passwords_file()
+        if new_password not in passwords:
+            passwords.append(new_password)
+            update_passwords_file(passwords, sha)
+            return f'発行されたパス: {new_password}'
+        else:
+            return f'発行失敗: 既に存在するパス "{new_password}"'
+    except Exception as e:
+        return f'Error: {str(e)}'
+
+# デフォルトルート
 @app.route("/")
 def index():
-    return "Password Issuer App is running."
+    return "Password Issuer App with Auto Issue is running."
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
