@@ -10,7 +10,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickRepl
 
 app = Flask(__name__)
 
-# 環境変数から取得
+# 環境変数
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -29,9 +29,9 @@ def get_passwords_from_github():
     r.raise_for_status()
     content = r.json()["content"]
     decoded_content = base64.b64decode(content).decode("utf-8")
-    passwords_data = json.loads(decoded_content)
-    print(f"Loaded passwords: {passwords_data}")
-    return passwords_data
+    passwords = json.loads(decoded_content)
+    print(f"Loaded passwords: {passwords}")
+    return passwords
 
 @app.route("/", methods=["GET"])
 def index():
@@ -50,10 +50,11 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    user_id = event.source.user_id
     user_message = event.message.text.strip()
 
     try:
-        passwords_data = get_passwords_from_github()
+        passwords = get_passwords_from_github()
     except Exception as e:
         print(f"[ERROR] Failed to fetch passwords.json: {e}")
         line_bot_api.reply_message(
@@ -62,12 +63,11 @@ def handle_message(event):
         )
         return
 
-    # 有効なパスワード一覧（used: false のもの）
-    valid_passwords = [entry["password"] for entry in passwords_data if not entry.get("used", True)]
-    print(f"Valid passwords: {valid_passwords}")
+    # パスワードのリストを作成
+    valid_passwords = [entry["password"] for entry in passwords]
 
     if user_message in valid_passwords:
-        # 認証成功 → ジャンル選択
+        # 認証成功 → ジャンル選択クイックリプライ
         quick_reply_buttons = [
             QuickReplyButton(action=MessageAction(label=genre, text=genre))
             for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
