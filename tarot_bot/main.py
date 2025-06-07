@@ -2,8 +2,8 @@
 import os
 import json
 import requests
+import base64
 from flask import Flask, request, abort
-
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
@@ -59,8 +59,8 @@ def handle_message(event):
             event.reply_token,
             TextSendMessage(text=f"受付けました: {user_message}")
         )
-        # ジャンル選択を送信
-        send_genre_selection(event.reply_token)
+        # ジャンル選択を送信（この1行を追加）
+        send_genre_selection(event)
 
     elif user_id in used_passwords:
         line_bot_api.reply_message(
