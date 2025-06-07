@@ -24,14 +24,11 @@ def get_passwords():
 
 # GitHub に passwords.json を更新
 def update_passwords(passwords, sha):
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    new_content = base64.b64encode(json.dumps(passwords, indent=2).encode("utf-8")).decode("utf-8")
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
     data = {
         "message": "Add new password",
-        "content": new_content,
+        "content": updated_content,
         "sha": sha
     }
     r = requests.put(PASSWORDS_JSON_URL, headers=headers, data=json.dumps(data))
@@ -47,12 +44,13 @@ def issue_password():
         passwords, sha = get_passwords()
         new_password = generate_password()
 
-        # すでに存在しないか確認（重複防止）
-        while new_password in passwords:
+        # 重複防止
+        existing_passwords = [entry["password"] for entry in passwords]
+        while new_password in existing_passwords:
             new_password = generate_password()
 
         # 追加
-        passwords.append(new_password)
+        passwords.append({"password": new_password, "used": False})
         update_passwords(passwords, sha)
 
         return f"発行パスワード: {new_password}"
