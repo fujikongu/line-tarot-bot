@@ -1,41 +1,49 @@
 
 import random
+from linebot.models import TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
 # ジャンルごとのタロットカード意味辞書
 TAROT_TEMPLATES = {
     "恋愛運": {
-        "THE_FOOL": "新しい出会い、自由な恋愛、冒険心",
-        "THE_LOVERS": "恋愛成⻑、運命の出会い、愛の選択",
-        "THE_TOWER": "突然の別れ、恋愛のトラブル"
+        "過去": "あなたの恋愛には過去に忘れられない思い出が影響しています。",
+        "現在": "今は新しい出会いやチャンスが訪れやすい時期です。",
+        "未来": "未来には心から愛せる相手との進展が期待できます。",
+        "対策・アドバイス": "自分の感情に素直になりましょう。新しい関係を恐れずに進んで。",
+        "最終結果": "あなたの魅力が高まり、望んだ恋愛関係が築けそうです。"
     },
     "仕事運": {
-        "THE_MAGICIAN": "新しいプロジェクトの成功、才能の発揮",
-        "THE_EMPEROR": "リーダーシップの発揮、安定した地位",
-        "THE_HERMIT": "一人でじっくり取り組む時期、内省の時間"
+        "過去": "過去の努力が現在の基盤となっています。",
+        "現在": "現在はチャンスが巡ってきています。積極的に行動を。",
+        "未来": "昇進や新たなプロジェクトへの参加が期待できます。",
+        "対策・アドバイス": "柔軟な思考とチームワークが成功の鍵になります。",
+        "最終結果": "仕事で大きな成果を上げ、評価が高まるでしょう。"
     },
     "金運": {
-        "THE_WHEEL_OF_FORTUNE": "運気上昇、思わぬ収入",
-        "THE_DEVIL": "浪費癖、借金に注意",
-        "THE_STAR": "希望が見える、将来の投資に良い兆し"
+        "過去": "過去の出費や投資が現在の状況に影響しています。",
+        "現在": "今は計画的なお金の使い方が重要な時期です。",
+        "未来": "収入が増えるチャンスがありますが、慎重な管理が必要です。",
+        "対策・アドバイス": "貯蓄と投資のバランスを見直しましょう。",
+        "最終結果": "安定した金運を築くことができるでしょう。"
     },
     "結婚": {
-        "THE_LOVERS": "愛に満ちた結婚、理想的なパートナーシップ",
-        "JUSTICE": "バランスの取れた結婚、契約や法的な進展",
-        "DEATH": "関係の再スタート、変化の時期"
+        "過去": "過去の恋愛経験が結婚観に影響を与えています。",
+        "現在": "パートナーとの関係が深まる時期です。",
+        "未来": "結婚に向けた具体的な動きがありそうです。",
+        "対策・アドバイス": "率直なコミュニケーションを心がけましょう。",
+        "最終結果": "お互いに信頼し合える良い結婚生活が築けます。"
     },
     "今日の運勢": {
-        "THE_STAR": "希望が見える良い一日",
-        "THE_TOWER": "トラブルに注意する日",
-        "THE_FOOL": "自由な発想で行動すると吉"
+        "過去": "最近の出来事が今日の気分に影響を与えています。",
+        "現在": "新しいアイデアやチャンスが舞い込みやすい日です。",
+        "未来": "思いがけない嬉しいニュースがあるかもしれません。",
+        "対策・アドバイス": "柔軟な姿勢で一日を楽しみましょう。",
+        "最終結果": "充実感と達成感を味わえる一日になるでしょう。"
     }
 }
 
 def send_genre_selection(event, line_bot_api):
     quick_reply_buttons = [
-        {
-            "type": "action",
-            "action": {"type": "message", "label": genre, "text": genre}
-        }
+        QuickReplyButton(action=MessageAction(label=genre, text=genre))
         for genre in TAROT_TEMPLATES.keys()
     ]
 
@@ -43,9 +51,7 @@ def send_genre_selection(event, line_bot_api):
         event.reply_token,
         TextSendMessage(
             text="✅パスワード認証成功！ジャンルを選んでください。",
-            quick_reply={
-                "items": quick_reply_buttons
-            }
+            quick_reply=QuickReply(items=quick_reply_buttons)
         )
     )
 
@@ -57,14 +63,13 @@ def send_tarot_reading(event, genre, line_bot_api):
         )
         return
 
-    cards = random.choices(list(TAROT_TEMPLATES[genre].keys()), k=5)
+    cards = list(TAROT_TEMPLATES[genre].items())
 
     reading_text = "🔮【{}のタロット占い】🔮\n\n".format(genre)
-    for i, card in enumerate(cards, 1):
-        meaning = TAROT_TEMPLATES[genre][card]
-        reading_text += "■ {}枚目：{} → {}\n".format(i, card, meaning)
+    for i, (position, meaning) in enumerate(cards, 1):
+        reading_text += "■ {}枚目 [{}] → {}\n".format(i, position, meaning)
 
-    reading_text += "\n✨総合アドバイス✨\n自分の気持ちを大切にし、流れに乗ることが成功のカギです。"
+    reading_text += "\n✨総合アドバイス✨\n前向きな気持ちを大切にし、自分の直感を信じて行動しましょう。"
 
     line_bot_api.reply_message(
         event.reply_token,
