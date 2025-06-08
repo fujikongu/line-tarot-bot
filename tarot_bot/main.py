@@ -1,5 +1,4 @@
-
-import os
+﻿import os
 import json
 import requests
 import base64
@@ -8,7 +7,6 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
-
 from genre_handlers import send_genre_selection, send_tarot_reading
 
 app = Flask(__name__)
@@ -24,41 +22,29 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 user_states = {}
 
 def get_passwords():
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
     response = requests.get(PASSWORDS_URL, headers=headers)
     if response.status_code == 200:
-        content = base64.b64decode(response.json()["content"])
-        return json.loads(content)
+        return json.loads(response.text)
     else:
-        print("Error fetching passwords.json:", response.status_code)
         return []
 
 def update_passwords(passwords):
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    response = requests.get(PASSWORDS_URL, headers=headers)
-    if response.status_code == 200:
-        sha = response.json()["sha"]
-        updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode()).decode()
-        data = {
-            "message": "Update passwords.json",
-            "content": updated_content,
-            "sha": sha
-        }
-        update_response = requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
-        if update_response.status_code in [200, 201]:
-            print("passwords.json updated successfully.")
-        else:
-            print("Error updating passwords.json:", update_response.status_code, update_response.text)
-
-@app.route("/callback", methods=["POST"])
-def callback():
-    signature = request.headers["X-Line-Signature"]
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return "OK"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    get_response = requests.get(PASSWORDS_URL, headers=headers)
+    sha = get_response.json()["sha"]
+    update_data = {
+        "message": "Update passwords.json",
+        "content": base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=4).encode()).decode(),
+        "sha": sha
+    }
+    requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(update_data))
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -87,8 +73,7 @@ def handle_message(event):
     else:
         genre = text
         send_tarot_reading(event, genre)
-#         del user_states[user_id]
+        # del user_states[user_id]
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
-
