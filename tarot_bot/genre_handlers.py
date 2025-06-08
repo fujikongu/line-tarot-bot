@@ -1,6 +1,11 @@
 
 import random
+import openai
+import os
 from linebot.models import TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+
+# OpenAI API KEY 環境変数から取得
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ジャンルごとのタロットカード意味辞書
 TAROT_TEMPLATES = {
@@ -69,9 +74,31 @@ def send_tarot_reading(event, genre, line_bot_api):
     for i, (position, meaning) in enumerate(cards, 1):
         reading_text += "■ {}枚目 [{}] → {}\n".format(i, position, meaning)
 
-    reading_text += "\n✨総合アドバイス✨\n前向きな気持ちを大切にし、自分の直感を信じて行動しましょう。"
+    # ChatGPT API 呼び出し用プロンプト作成
+    prompt_text = "あなたはプロのタロット占い師です。\n"
+    prompt_text += f"ジャンル：{genre} の占い結果は以下のとおりです。\n\n"
+    for i, (position, meaning) in enumerate(cards, 1):
+        prompt_text += f"{i}枚目 [{position}] → {meaning}\n"
+    prompt_text += "\nこの結果をもとに1500文字程度のプロのタロット占い総合アドバイスを書いてください。\n"
+    prompt_text += "必ず自然な日本語で丁寧に整えて、読みやすい形にしてください。\n"
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "あなたはプロのタロット占い師です。"},
+                {"role": "user", "content": prompt_text}
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+
+        ai_advice = response["choices"][0]["message"]["content"].strip()
+
+    except Exception as e:
+        ai_advice = f"❌ ChatGPT API呼び出しエラーが発生しました：{e}"
 
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(text=reading_text)
+        TextSendMessage(text=reading_text + "\n\n✨総合アドバイス✨\n" + ai_advice)
     )
