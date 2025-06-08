@@ -10,7 +10,6 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickRepl
 
 app = Flask(__name__)
 
-# LINE Botのチャネルアクセストークンとシークレット
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -18,22 +17,23 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# GitHubのpasswords.jsonのURL
 PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-def get_passwords_from_github():
+def get_passwords():
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.raw"
     }
     response = requests.get(PASSWORDS_URL, headers=headers)
     if response.status_code == 200:
-        return json.loads(response.text)
+        passwords = json.loads(response.text)
+        print(f"DEBUG passwords.json content: {passwords}")  # ★DEBUG
+        return passwords
     else:
         print(f"Failed to fetch passwords.json: {response.status_code}, {response.text}")
         return []
 
-def update_passwords_on_github(passwords):
+def update_passwords(passwords):
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
@@ -67,21 +67,16 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_message = event.message.text.strip()
+    print(f"DEBUG user_message: '{user_message}'")  # ★DEBUG
 
-    # パスワード判定
-    passwords = get_passwords_from_github()
-    password_entry = next((p for p in passwords if p.get("password") == user_message), None)
+    passwords = get_passwords()
+    password_data = next((p for p in passwords if p.get("password") == user_message), None)
+    print(f"DEBUG matched password_data: {password_data}")  # ★DEBUG
 
-    if password_entry:
-        if password_entry.get("used"):
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="❌このパスワードは既に使用されています。新しいパスワードをご購入ください。")
-            )
-            return
-
-        password_entry["used"] = True
-        update_passwords_on_github(passwords)
+    if password_data is not None and password_data.get("used", False) is False:
+        # 認証成功 → 使用済に更新
+        password_data["used"] = True
+        update_passwords(passwords)
 
         line_bot_api.reply_message(
             event.reply_token,
@@ -97,22 +92,18 @@ def handle_message(event):
                 ])
             )
         )
-        return
-
-    # ここは占いジャンルの判定 (簡易版、詳細は genre_handlers.py 側で処理)
-    valid_genres = ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
-    if user_message in valid_genres:
+    elif password_data is not None and password_data.get("used", False) is True:
+        # 既に使用済
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=f"「{user_message}」の占い結果を準備中です...")
+            TextSendMessage(text="❌このパスワードは既に使用されています。新しいパスワードをご購入ください。")
         )
-        return
-
-    # それ以外のメッセージ
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text="❌パスワードを入力してください。")
-    )
+    else:
+        # 認証失敗
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="❌パスワードを入力してください。")
+        )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
