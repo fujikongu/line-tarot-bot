@@ -1,6 +1,7 @@
 ﻿# coding: utf-8-sig
 
 import os
+import base64
 import json
 import requests
 from flask import Flask, request, abort
