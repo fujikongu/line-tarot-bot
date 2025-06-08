@@ -87,7 +87,7 @@ def handle_message(event):
     else:
         genre = text
         send_tarot_reading(event, genre)
-        del user_states[user_id]
+#         del user_states[user_id]
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
