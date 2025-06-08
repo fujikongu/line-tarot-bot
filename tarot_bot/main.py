@@ -100,7 +100,7 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
     else:
         genre = text
-        send_tarot_reading(event, genre)
+        send_tarot_reading(event, genre, line_bot_api)
         del user_states[user_id]
 
 if __name__ == "__main__":
