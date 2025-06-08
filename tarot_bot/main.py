@@ -74,7 +74,7 @@ def handle_message(event):
                     password_entry["used"] = True
                     update_passwords(passwords)
                     user_states[user_id] = "authenticated"
-                    send_genre_selection(event)
+                    send_genre_selection(event, line_bot_api)
                 else:
                     reply_text = "❌このパスワードは既に使用されています。新しいパスワードをご購入ください。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
