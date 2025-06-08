@@ -1,11 +1,11 @@
 
 from flask import Flask, request, render_template_string
-import os
-import json
 import random
 import string
-import base64
+import json
+import os
 import requests
+import base64
 
 app = Flask(__name__)
 
@@ -15,15 +15,15 @@ FILE_PATH = "password_issuer/passwords.json"
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html lang="ja">
+<html lang='ja'>
 <head>
-    <meta charset="UTF-8">
+    <meta charset='UTF-8'>
     <title>パスワード発行</title>
 </head>
-<body style="text-align:center;padding-top:50px;font-size:2em;">
+<body style='text-align:center;padding-top:50px;font-size:2em;'>
     <h1>パスワード発行</h1>
-    <form method="post">
-        <button type="submit" style="font-size:2em;padding:20px 40px;">発行する</button>
+    <form method='post'>
+        <button type='submit' style='font-size:2em;padding:20px;'>発行する</button>
     </form>
     {% if password %}
         <p>発行されたパスワード: <strong>{{ password }}</strong></p>
@@ -55,14 +55,14 @@ def update_passwords(passwords, sha):
         "content": new_content,
         "sha": sha
     }
-    response = requests.put(url, headers=headers, data=json.dumps(data))
+    response = requests.put(url, headers=headers, json=data)
     response.raise_for_status()
 
-def generate_password(length=8):
-    return "mem" + "".join(random.choices(string.digits, k=length - 3))
+def generate_password():
+    return "mem" + ''.join(random.choices(string.digits, k=4))
 
-@app.route("/", methods=["GET", "POST"])
-def index():
+@app.route("/issue-password", methods=["GET", "POST"])
+def issue_password():
     password = None
     if request.method == "POST":
         passwords, sha = get_passwords()
