@@ -1,12 +1,14 @@
-﻿import os
+﻿
+# -*- coding: utf-8-sig -*-
+import os
 import json
 import requests
 import base64
+import openai
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
-
 from genre_handlers import send_genre_selection, send_tarot_reading
 
 app = Flask(__name__)
@@ -14,64 +16,40 @@ app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-user_states = {}
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
 def get_passwords():
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw",
-    }
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(PASSWORDS_URL, headers=headers)
-    if response.status_code == 200:
-        return json.loads(response.text)
-    else:
-        print("Failed to fetch passwords:", response.status_code)
-        return []
+    content = json.loads(response.json()["content"].encode("utf-8"))
+    return json.loads(base64.b64decode(content).decode("utf-8"))
 
 def update_passwords(passwords):
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=4).encode("utf-8-sig")).decode("utf-8")
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(PASSWORDS_URL, headers=headers)
+    sha = response.json()["sha"]
+    updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
     data = {
         "message": "Update passwords.json",
-        "content": content,
-        "sha": get_passwords_sha(),
+        "content": updated_content,
+        "sha": sha
     }
-    response = requests.put(PASSWORDS_URL, headers=headers, json=data)
-    if response.status_code == 200 or response.status_code == 201:
-        print("Passwords updated successfully")
-    else:
-        print("Failed to update passwords:", response.status_code, response.text)
+    requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
 
-def get_passwords_sha():
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    response = requests.get(PASSWORDS_URL, headers=headers)
-    if response.status_code == 200:
-        return response.json()["sha"]
-    else:
-        print("Failed to fetch SHA:", response.status_code)
-        return None
+user_states = {}
 
 @app.route("/callback", methods=["POST"])
 def callback():
-    body = request.get_data(as_text=True)
     signature = request.headers["X-Line-Signature"]
-
+    body = request.get_data(as_text=True)
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-
     return "OK"
 
 @handler.add(MessageEvent, message=TextMessage)
@@ -96,11 +74,12 @@ def handle_message(event):
                 reply_text = "❌無効なパスワードです。"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         else:
-            reply_text = "❌パスワードを入力してください。"
+            reply_text = "❌パスワードを入力してください。
+例：mem1091"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
     else:
         genre = text
-        send_tarot_reading(event, genre, line_bot_api)
+        send_tarot_reading(event, genre)
         del user_states[user_id]
 
 if __name__ == "__main__":
