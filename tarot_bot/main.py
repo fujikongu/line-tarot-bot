@@ -1,5 +1,5 @@
-﻿
-# -*- coding: utf-8-sig -*-
+﻿# main.py
+
 import os
 import json
 import requests
@@ -16,31 +16,46 @@ app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
+user_states = {}
 
 def get_passwords():
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
     response = requests.get(PASSWORDS_URL, headers=headers)
-    content = json.loads(response.json()["content"].encode("utf-8"))
-    return json.loads(base64.b64decode(content).decode("utf-8"))
+    if response.status_code == 200:
+        return json.loads(response.content)
+    else:
+        print("Failed to fetch passwords:", response.status_code)
+        return []
 
 def update_passwords(passwords):
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    response = requests.get(PASSWORDS_URL, headers=headers)
-    sha = response.json()["sha"]
-    updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
-    data = {
-        "message": "Update passwords.json",
-        "content": updated_content,
-        "sha": sha
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
-    requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
-
-user_states = {}
+    get_response = requests.get(PASSWORDS_URL, headers=headers)
+    if get_response.status_code == 200:
+        sha = get_response.json()["sha"]
+        content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
+        data = {
+            "message": "Update passwords",
+            "content": content,
+            "sha": sha
+        }
+        put_response = requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
+        if put_response.status_code == 200:
+            print("Passwords updated successfully")
+        else:
+            print("Failed to update passwords:", put_response.status_code, put_response.text)
+    else:
+        print("Failed to fetch current passwords SHA:", get_response.status_code)
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -74,13 +89,12 @@ def handle_message(event):
                 reply_text = "❌無効なパスワードです。"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         else:
-            reply_text = "❌パスワードを入力してください。
-例：mem1091"
+            reply_text = "❌パスワードを入力してください。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
     else:
         genre = text
         send_tarot_reading(event, genre)
-        del user_states[user_id]
+        # del user_states[user_id]
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
