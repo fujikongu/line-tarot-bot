@@ -6,7 +6,7 @@ import base64
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
 from genre_handlers import send_genre_selection, send_tarot_reading
 
@@ -16,41 +16,24 @@ app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO_URL = os.getenv("GITHUB_REPO_URL")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # GitHubのpasswords.jsonのURL
-PASSWORDS_JSON_URL = GITHUB_REPO_URL.replace("github.com", "api.github.com/repos") + "/contents/password_issuer/passwords.json"
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
 # GitHub から passwords.json を取得
 def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    r = requests.get(PASSWORDS_JSON_URL, headers=headers)
+    r = requests.get(PASSWORDS_URL, headers=headers)
+    print(f"GitHub API status: {r.status_code}")
     r.raise_for_status()
     content = r.json()["content"]
     decoded_content = base64.b64decode(content).decode("utf-8")
-    return json.loads(decoded_content)
-
-# GitHub に passwords.json を更新
-def update_passwords_on_github(passwords):
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    r = requests.get(PASSWORDS_JSON_URL, headers=headers)
-    r.raise_for_status()
-    sha = r.json()["sha"]
-    updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
-    data = {
-        "message": "Update passwords.json",
-        "content": updated_content,
-        "sha": sha
-    }
-    put_url = PASSWORDS_JSON_URL
-    r = requests.put(put_url, headers=headers, data=json.dumps(data))
-    r.raise_for_status()
+    passwords = json.loads(decoded_content)
+    print(f"Loaded passwords: {passwords}")
+    return passwords
 
 @app.route("/", methods=["GET"])
 def index():
@@ -82,36 +65,46 @@ def handle_message(event):
         )
         return
 
-    valid_password_entry = next((p for p in passwords if p["password"] == user_message), None)
+    if user_message in passwords:
+        # 認証成功 → パスワード使用済みに更新
+        passwords[user_message] = True
+        try:
+            update_passwords_on_github(passwords)
+        except Exception as e:
+            print(f"[ERROR] Failed to update passwords.json: {e}")
 
-    if valid_password_entry:
-        if valid_password_entry["used"]:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="❌このパスワードは既に使用されています。新しいパスワードをご購入ください。")
-            )
-        else:
-            valid_password_entry["used"] = True
-            try:
-                update_passwords_on_github(passwords)
-            except Exception as e:
-                print(f"[ERROR] Failed to update passwords.json: {e}")
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="パスワード更新エラーが発生しました。")
-                )
-                return
+        # ジャンル選択画面へ
+        send_genre_selection(event, line_bot_api)
 
-            send_genre_selection(event, line_bot_api)
-
-    elif user_message in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]:
+    elif user_message in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]:
         send_tarot_reading(event, user_message, line_bot_api)
 
     else:
+        # 認証失敗 or 通常メッセージ
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="❌無効なパスワードです。")
+            TextSendMessage(text="❌パスワードを入力してください。\n例：mem1091")
         )
+
+# GitHub に passwords.json を更新
+def update_passwords_on_github(passwords):
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    r = requests.get(PASSWORDS_URL, headers=headers)
+    r.raise_for_status()
+    sha = r.json()["sha"]
+
+    updated_content = json.dumps(passwords, ensure_ascii=False, indent=2)
+    b64_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
+
+    data = {
+        "message": "Update passwords.json",
+        "content": b64_content,
+        "sha": sha
+    }
+
+    put_r = requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
+    put_r.raise_for_status()
+    print(f"Updated passwords.json successfully.")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
