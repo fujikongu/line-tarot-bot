@@ -1,10 +1,7 @@
 ﻿
-# main.py (正常版・utf-8-sig)
-
 import os
 import json
 import requests
-import base64
 from flask import Flask, request, abort, render_template_string
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -26,36 +23,29 @@ PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/
 user_states = {}
 
 def get_passwords():
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(PASSWORDS_URL, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print("Failed to fetch passwords.json")
-        return []
+    response.raise_for_status()
+    content = response.json()
+    return json.loads(requests.utils.unquote(content["content"]).decode('base64'))
 
 def update_passwords(passwords):
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Content-Type": "application/json"
     }
-    get_response = requests.get(PASSWORDS_URL, headers=headers)
-    sha = get_response.json()["sha"]
+    current_data = requests.get(PASSWORDS_URL, headers=headers).json()
+    sha = current_data["sha"]
+    updated_content = json.dumps(passwords, ensure_ascii=False, indent=4)
+    b64_content = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
 
-    content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
     data = {
         "message": "Update passwords.json",
-        "content": content,
+        "content": b64_content,
         "sha": sha
     }
     response = requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
-    if response.status_code == 200:
-        print("Passwords updated successfully.")
-    else:
-        print(f"Failed to update passwords.json: {response.content}")
+    response.raise_for_status()
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -97,26 +87,27 @@ def handle_message(event):
     else:
         genre = text
         send_tarot_reading(event, genre)
-        # del user_states[user_id]  # ここはコメントのまま保持OK
+        del user_states[user_id]
 
-# 簡易パスワード発行画面
 @app.route("/issue-password", methods=["GET", "POST"])
 def issue_password():
     if request.method == "POST":
-        import random
-        new_password = f"mem{random.randint(1000,9999)}"
-
+        new_password = "mem" + str(random.randint(1000, 9999))
         passwords = get_passwords()
         passwords.append({"password": new_password, "used": False})
         update_passwords(passwords)
-
-        return f"<h2>新しいパスワード: {new_password}</h2>"
-
+        return f"新しいパスワード: {new_password}"
     return render_template_string("""
-        <h2>パスワード発行</h2>
-        <form method="post">
-            <button type="submit">発行する</button>
-        </form>
+        <!doctype html>
+        <html lang="ja">
+        <head><meta charset="utf-8"><title>パスワード発行</title></head>
+        <body>
+            <h1>パスワード発行</h1>
+            <form method="post">
+                <button type="submit">発行する</button>
+            </form>
+        </body>
+        </html>
     """)
 
 if __name__ == "__main__":
