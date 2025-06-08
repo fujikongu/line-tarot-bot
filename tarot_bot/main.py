@@ -8,7 +8,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
-from genre_handlers import handle_genre_selection
+from genre_handlers import handle_genre_message
 
 app = Flask(__name__)
 
