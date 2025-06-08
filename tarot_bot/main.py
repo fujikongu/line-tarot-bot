@@ -83,7 +83,6 @@ def handle_message(event):
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         else:
             reply_text = "❌パスワードを入力してください。"
-例：mem1091"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
     else:
         genre = text
