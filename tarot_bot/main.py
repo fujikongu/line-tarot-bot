@@ -1,13 +1,14 @@
 ﻿
 import os
 import json
-import base64
 import requests
+import base64
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
-from genre_handlers import genre_handlers
+
+import genre_handlers  # 修正版（正しいインポート）
 
 app = Flask(__name__)
 
@@ -22,83 +23,97 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 # GitHubのpasswords.jsonのURL
 PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
+# GitHub から passwords.json を取得
 def get_passwords():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(PASSWORDS_URL, headers=headers)
     if response.status_code == 200:
-        content = response.json()["content"]
-        decoded_content = base64.b64decode(content).decode('utf-8-sig')
-        return json.loads(decoded_content)
+        content = response.json()
+        file_content = base64.b64decode(content["content"]).decode("utf-8-sig")
+        return json.loads(file_content), content["sha"]
     else:
-        print(f"Failed to fetch passwords: {response.status_code}, {response.text}")
-        return []
+        return [], None
 
-def update_passwords(passwords):
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    get_response = requests.get(PASSWORDS_URL, headers=headers)
-    sha = get_response.json()["sha"]
+# GitHub に passwords.json を更新
+def update_passwords(passwords, sha):
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Content-Type": "application/json"
+    }
     updated_content = json.dumps(passwords, ensure_ascii=False, indent=4)
-    encoded_content = base64.b64encode(updated_content.encode('utf-8-sig')).decode('utf-8')
+    encoded_content = base64.b64encode(updated_content.encode("utf-8-sig")).decode("utf-8")
     data = {
         "message": "Update passwords.json",
         "content": encoded_content,
         "sha": sha
     }
-    response = requests.put(PASSWORDS_URL, headers=headers, json=data)
-    if response.status_code not in [200, 201]:
-        print(f"Failed to update passwords: {response.status_code}, {response.text}")
+    response = requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
+    return response.status_code == 200 or response.status_code == 201
 
-@app.route("/callback", methods=['POST'])
+# パスワードを検証
+def verify_password(input_password):
+    passwords, sha = get_passwords()
+    for pw in passwords:
+        if pw["password"] == input_password:
+            if pw["used"]:
+                return "used", passwords, sha
+            else:
+                pw["used"] = True
+                update_passwords(passwords, sha)
+                return "valid", passwords, sha
+    return "invalid", passwords, sha
+
+@app.route("/callback", methods=["POST"])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-    return 'OK'
+    return "OK"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_message = event.message.text.strip()  # ← 追加！これで余分な空白対策
+    text = event.message.text.strip()
 
-    passwords = get_passwords()
+    # パスワード認証済みかどうかをユーザーごとに判定（簡易版）
+    if not hasattr(handle_message, "verified_users"):
+        handle_message.verified_users = set()
 
-    # パスワード未入力時メッセージ
-    if not user_message.startswith("mem"):
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="❌パスワードを入力してください。")
-        )
-        return
+    user_id = event.source.user_id
 
-    # パスワード判定
-    password_entry = next((p for p in passwords if p["password"] == user_message), None)
-
-    if password_entry:
-        if password_entry["used"]:
+    if user_id not in handle_message.verified_users:
+        status, _, _ = verify_password(text)
+        if status == "valid":
+            handle_message.verified_users.add(user_id)
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="✅パスワード認証成功！ジャンルを選んでください。",
+                    quick_reply=QuickReply(items=[
+                        QuickReplyButton(action=MessageAction(label=genre, text=genre))
+                        for genre in ["恋愛運", "仕事運", "金運", "今日の運勢", "結婚", "未来の恋愛"]
+                    ])
+                )
+            )
+        elif status == "used":
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="❌このパスワードは既に使用されています。新しいパスワードをご購入ください。")
             )
         else:
-            password_entry["used"] = True
-            update_passwords(passwords)
-            quick_reply_buttons = [
-                QuickReplyButton(action=MessageAction(label=genre, text=genre))
-                for genre in genre_handlers.keys()
-            ]
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(
-                    text="✅パスワード認証成功！ジャンルを選んでください。",
-                    quick_reply=QuickReply(items=quick_reply_buttons)
-                )
+                TextSendMessage(text="❌パスワードを入力してください。")
             )
     else:
+        # 認証済みユーザー → ジャンルに応じた応答
+        genre = text
+        response_text = genre_handlers.get_tarot_reading(genre)
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="❌パスワードが無効です。正しいパスワードを入力してください。")
+            TextSendMessage(text=response_text)
         )
 
 if __name__ == "__main__":
