@@ -1,7 +1,7 @@
 {
-  "恋愛運": "romance_tarot_template.json",
-  "仕事運": "work_tarot_template.json",
-  "金運": "money_tarot_template.json",
-  "結婚・未来の恋愛": "marriage_tarot_template.json",
-  "今日の運勢": "daily_tarot_template.json"
+    "恋愛運": "tarot_bot/tarot_templates/love.json",
+    "仕事運": "tarot_bot/tarot_templates/work.json",
+    "金運": "tarot_bot/tarot_templates/money.json",
+    "結婚": "tarot_bot/tarot_templates/marriage.json",
+    "今日の運勢": "tarot_bot/tarot_templates/today.json"
 }

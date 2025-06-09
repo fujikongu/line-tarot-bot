@@ -1,38 +1,40 @@
 
+# genre_handlers.py
+
 import json
 import os
+from linebot.models import TextSendMessage
+from tarot_data import load_tarot_template  # 正しくこちらをimport
 
-def load_genre_file_map():
-    with open("tarot_bot/genre_file_map.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+def handle_genre_selection(event, line_bot_api, PASSWORDS_URL, GITHUB_TOKEN, genre_file_map):
+    user_id = event.source.user_id
+    genre = event.postback.data if hasattr(event, 'postback') else event.message.text.strip()
 
-def load_tarot_template(genre):
-    genre_file_map = load_genre_file_map()
     if genre not in genre_file_map:
-        raise ValueError(f"ジャンル '{genre}' は無効です。")
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="❌ 無効なジャンルが選択されました。もう一度選んでください。")
+        )
+        return
 
-    template_file_path = os.path.join("tarot_bot", genre_file_map[genre])
+    # tarotテンプレート読み込み
+    template = load_tarot_template(genre_file_map[genre])
+    if not template:
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="❌ 占いデータの読み込みに失敗しました。")
+        )
+        return
 
-    with open(template_file_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    # 占い結果のメッセージ整形
+    result_message = f"🔮【{genre}】占い結果\n\n"
+    for i, card in enumerate(template['cards'], 1):
+        result_message += f"{i}枚目: {card['name']}（{card['position']}）\n意味: {card['meaning']}\n\n"
 
-def handle_genre_selection(genre):
-    try:
-        tarot_template = load_tarot_template(genre)
+    result_message += f"\n💡 総合アドバイス:\n{template['advice']}"
 
-        # カードを5枚ランダムに選ぶ
-        import random
-        selected_cards = random.sample(tarot_template["cards"], 5)
-
-        # メッセージ生成
-        message = f"🔮【{genre}】の占い結果🔮\n\n"
-        for idx, card in enumerate(selected_cards, start=1):
-            message += f"{idx}. {card['name']} ({card['position']})\n{card['meaning']}\n\n"
-
-        message += "✨あなたへの総合アドバイス✨\n"
-        message += "（この部分は GPT API 呼び出しにより自動生成予定）"
-
-        return message
-
-    except Exception as e:
-        return f"エラーが発生しました: {str(e)}"
+    # 返信
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=result_message)
+    )
