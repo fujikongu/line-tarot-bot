@@ -6,12 +6,16 @@ import base64
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
-
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+    QuickReply, QuickReplyButton, MessageAction
+)
+from tarot_data import tarot_templates
 from genre_handlers import handle_genre_selection
 
 app = Flask(__name__)
 
+# 環境変数の読み込み
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -21,67 +25,73 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-# GitHub から passwords.json を取得
 def get_passwords():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(PASSWORDS_URL, headers=headers)
     if response.status_code == 200:
-        content = base64.b64decode(response.json()["content"]).decode("utf-8-sig")
+        content = response.json()["content"]
+        decoded = base64.b64decode(content).decode("utf-8")
+        return json.loads(decoded)
+    return []
+
+def update_password_state(password):
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    response = requests.get(PASSWORDS_URL, headers=headers)
+    if response.status_code == 200:
+        sha = response.json()["sha"]
+        content = base64.b64decode(response.json()["content"]).decode("utf-8")
         passwords = json.loads(content)
-        print("✅ Loaded passwords:", passwords)
-        return passwords
-    else:
-        print(f"❌ Failed to load passwords.json: {response.status_code} {response.text}")
-        return []
+        for entry in passwords:
+            if entry["password"] == password:
+                entry["state"] = "done"
+        updated_content = base64.b64encode(json.dumps(passwords, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
+        data = {
+            "message": "Update password state to done",
+            "content": updated_content,
+            "sha": sha
+        }
+        requests.put(PASSWORDS_URL, headers=headers, data=json.dumps(data))
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
-
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-
     return "OK"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_message = event.message.text.strip()
-    user_id = event.source.user_id
+    text = event.message.text.strip()
+    passwords = get_passwords()
+    for entry in passwords:
+        if entry["password"] == text and entry.get("state") != "done":
+            update_password_state(text)
+            send_genre_selection(event)
+            return
+    if text in tarot_templates:
+        handle_genre_selection(event, text)
+        return
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text="❌パスワードが無効です。正しいパスワードを入力してください。")
+    )
 
-    # user_states を初期化
-    if not hasattr(app, "user_states"):
-        app.user_states = {}
-    state = app.user_states.get(user_id, {"stage": "password"})
-
-    if state["stage"] == "password":
-        passwords = get_passwords()
-        matching_password = next((p for p in passwords if p["password"] == user_message and not p["used"]), None)
-
-        if matching_password:
-            matching_password["used"] = True  # 使用済み（簡易実装、本番はPUTで更新）
-            app.user_states[user_id] = {"stage": "genre_selection"}
-
-            reply_text = "✅パスワード認証成功！ジャンルを選んでください。"
-            quick_reply = QuickReply(items=[
-                QuickReplyButton(action=MessageAction(label="恋愛運", text="恋愛運")),
-                QuickReplyButton(action=MessageAction(label="仕事運", text="仕事運")),
-                QuickReplyButton(action=MessageAction(label="金運", text="金運")),
-                QuickReplyButton(action=MessageAction(label="結婚", text="結婚")),
-                QuickReplyButton(action=MessageAction(label="今日の運勢", text="今日の運勢")),
-            ])
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text, quick_reply=quick_reply))
-
-        else:
-            reply_text = "❌パスワードが無効です。正しいパスワードを入力してください。"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-
-    elif state["stage"] == "genre_selection":
-        genre = user_message
-        handle_genre_selection(event, genre)
-        app.user_states[user_id] = {"stage": "password"}
+def send_genre_selection(event):
+    buttons = [
+        QuickReplyButton(action=MessageAction(label=key, text=key))
+        for key in tarot_templates
+    ]
+    message = TextSendMessage(
+        text="✅パスワード認証成功！\nジャンルを選んでください。",
+        quick_reply=QuickReply(items=buttons)
+    )
+    line_bot_api.reply_message(event.reply_token, message)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    app.run()
