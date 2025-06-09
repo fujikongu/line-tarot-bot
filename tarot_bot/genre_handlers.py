@@ -1,22 +1,30 @@
-
+﻿
+from linebot import LineBotApi
 from linebot.models import TextSendMessage
 from tarot_data import tarot_templates
-import random
 
-def handle_genre_selection(user_id, genre):
-    # ジャンルが tarot_templates に存在するかチェック
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+
+GENRES = ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
+
+def handle_genre_selection(event, genre):
     if genre not in tarot_templates:
-        return TextSendMessage(text="⚠️ 無効なジャンルが選択されました。もう一度ジャンルを選んでください。")
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="❌無効なジャンルが選択されました。もう一度ジャンルを選んでください。")
+        )
+        return
 
-    # ジャンルのカードリストから5枚ランダムに選択
-    selected_cards = random.sample(tarot_templates[genre], 5)
+    template = tarot_templates[genre]
+    result_message = f"🔮【{genre}】の診断結果🔮\n\n"
+    for i, (title, content) in enumerate(template.items(), start=1):
+        result_message += f"{i}. {title}\n{content}\n\n"
 
-    # 結果メッセージ生成
-    result_message = f"🔮【{genre}の占い結果】🔮\n\n"
-    for idx, card in enumerate(selected_cards, start=1):
-        result_message += f"{idx}. {card}\n"
+    # 総合アドバイス部分は仮のメッセージでセット
+    result_message += "⭐️【総合アドバイス】⭐️\n今は自分の気持ちを大切に行動していきましょう。"
 
-    result_message += "\n✨ご利用ありがとうございました✨"
-
-    # LINEへ返却用メッセージ
-    return TextSendMessage(text=result_message)
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=result_message)
+    )
