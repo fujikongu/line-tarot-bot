@@ -1,31 +1,16 @@
 
-# tarot_data.py
+from tarot_templates_by_genre import (
+    romance_tarot_template,
+    work_tarot_template,
+    money_tarot_template,
+    marriage_tarot_template,
+    daily_tarot_template
+)
 
-# TAROT_CARDS: 78枚のカードリスト（大アルカナ＋小アルカナ）
-TAROT_CARDS = [
-    "THE_FOOL", "THE_MAGICIAN", "THE_HIGH_PRIESTESS", "THE_EMPRESS", "THE_EMPEROR", "THE_HIEROPHANT", "THE_LOVERS",
-    "THE_CHARIOT", "STRENGTH", "THE_HERMIT", "WHEEL_OF_FORTUNE", "JUSTICE", "THE_HANGED_MAN", "DEATH", "TEMPERANCE",
-    "THE_DEVIL", "THE_TOWER", "THE_STAR", "THE_MOON", "THE_SUN", "JUDGEMENT", "THE_WORLD",
-    "ACE_OF_WANDS", "TWO_OF_WANDS", "THREE_OF_WANDS", "FOUR_OF_WANDS", "FIVE_OF_WANDS", "SIX_OF_WANDS", "SEVEN_OF_WANDS",
-    "EIGHT_OF_WANDS", "NINE_OF_WANDS", "TEN_OF_WANDS", "PAGE_OF_WANDS", "KNIGHT_OF_WANDS", "QUEEN_OF_WANDS", "KING_OF_WANDS",
-    "ACE_OF_CUPS", "TWO_OF_CUPS", "THREE_OF_CUPS", "FOUR_OF_CUPS", "FIVE_OF_CUPS", "SIX_OF_CUPS", "SEVEN_OF_CUPS",
-    "EIGHT_OF_CUPS", "NINE_OF_CUPS", "TEN_OF_CUPS", "PAGE_OF_CUPS", "KNIGHT_OF_CUPS", "QUEEN_OF_CUPS", "KING_OF_CUPS",
-    "ACE_OF_SWORDS", "TWO_OF_SWORDS", "THREE_OF_SWORDS", "FOUR_OF_SWORDS", "FIVE_OF_SWORDS", "SIX_OF_SWORDS", "SEVEN_OF_SWORDS",
-    "EIGHT_OF_SWORDS", "NINE_OF_SWORDS", "TEN_OF_SWORDS", "PAGE_OF_SWORDS", "KNIGHT_OF_SWORDS", "QUEEN_OF_SWORDS", "KING_OF_SWORDS",
-    "ACE_OF_PENTACLES", "TWO_OF_PENTACLES", "THREE_OF_PENTACLES", "FOUR_OF_PENTACLES", "FIVE_OF_PENTACLES", "SIX_OF_PENTACLES", "SEVEN_OF_PENTACLES",
-    "EIGHT_OF_PENTACLES", "NINE_OF_PENTACLES", "TEN_OF_PENTACLES", "PAGE_OF_PENTACLES", "KNIGHT_OF_PENTACLES", "QUEEN_OF_PENTACLES", "KING_OF_PENTACLES"
-]
-
-# TAROT_MEANINGS: ジャンル別 → カード別 → 正逆意味
-TAROT_MEANINGS = {}
-
-genres = ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
-
-# 自動生成用テンプレート（後で手修正可）
-for genre in genres:
-    TAROT_MEANINGS[genre] = {}
-    for card in TAROT_CARDS:
-        TAROT_MEANINGS[genre][card] = {
-            "正位置": f"[{genre}] {card} の正位置の意味テンプレートです。",
-            "逆位置": f"[{genre}] {card} の逆位置の意味テンプレートです。"
-        }
+tarot_templates_by_genre = {
+    "恋愛運": romance_tarot_template,
+    "仕事運": work_tarot_template,
+    "金運": money_tarot_template,
+    "結婚": marriage_tarot_template,
+    "今日の運勢": daily_tarot_template
+}
