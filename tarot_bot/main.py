@@ -25,7 +25,6 @@ def get_passwords():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(PASSWORDS_URL, headers=headers)
     response.raise_for_status()
-    import base64
     content_encoded = response.json()["content"]
     content_json = base64.b64decode(content_encoded).decode("utf-8")
     print("DEBUG passwords content:", content_json)
@@ -71,7 +70,7 @@ def handle_message(event):
             if pw_entry["password"] == text and not pw_entry["used"]:
                 pw_entry["used"] = True
                 update_passwords(passwords)
-                user_states[user_id] = "awaiting_genre"
+                user_states[user_id] = "waiting_genre"
                 reply_text = "✅パスワード認証成功！\nジャンルを選んでください。"
                 quick_reply = QuickReply(items=[
                     QuickReplyButton(action=MessageAction(label=label, text=label))
@@ -86,8 +85,18 @@ def handle_message(event):
             event.reply_token,
             TextSendMessage(text="❌パスワードが無効です。正しいパスワードを入力してください。")
         )
-    elif state == "awaiting_genre":
-        handle_genre_selection(event, user_states)
+    elif user_states.get(user_id) == "waiting_genre":
+        selected_genre = text
+        tarot_result = handle_genre_selection(selected_genre)
+
+        # ユーザー状態を初期化
+        user_states[user_id] = "idle"
+
+        # tarot_result を返信
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=tarot_result)
+        )
 
 # アプリ起動
 if __name__ == "__main__":
