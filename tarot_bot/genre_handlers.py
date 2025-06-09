@@ -1,33 +1,19 @@
-﻿
-from linebot.models import TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
-def handle_genre_message(event, line_bot_api):
-    # ジャンル選択用のQuickReplyを送信
-    quick_reply_buttons = [
-        QuickReplyButton(action=MessageAction(label="恋愛運", text="恋愛運")),
-        QuickReplyButton(action=MessageAction(label="仕事運", text="仕事運")),
-        QuickReplyButton(action=MessageAction(label="金運", text="金運")),
-        QuickReplyButton(action=MessageAction(label="結婚", text="結婚")),
-        QuickReplyButton(action=MessageAction(label="未来の恋愛", text="未来の恋愛")),
-        QuickReplyButton(action=MessageAction(label="今日の運勢", text="今日の運勢")),
-    ]
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(
-            text="占いたいジャンルを選んでください。",
-            quick_reply=QuickReply(items=quick_reply_buttons)
-        )
-    )
+import tarot_data
+from tarot_data import tarot_templates_by_genre
+from linebot.models import TextSendMessage
 
 def handle_genre_selection(event, line_bot_api):
-    # ジャンル選択後の仮返信（ここに後で占い結果ロジックを入れる予定）
-    genre = event.postback.data  # postback.data からジャンル取得
-    user_id = event.source.user_id
-
-    result_text = f"ジャンル「{genre}」の占い結果はこちら！（仮表示）"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=result_text)
-    )
+    genre = event.message.text
+    if genre in tarot_templates_by_genre:
+        cards = tarot_data.draw_tarot_cards()
+        result = tarot_data.format_tarot_result(genre, cards)
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=result)
+        )
+    else:
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="⚠️ 無効なジャンルが選択されました。")
+        )
