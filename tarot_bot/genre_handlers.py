@@ -4,21 +4,23 @@
 import json
 import os
 from linebot.models import TextSendMessage
-from tarot_data import load_tarot_template  # 正しくこちらをimport
+from tarot_data import load_tarot_template
 
 def handle_genre_selection(event, line_bot_api, PASSWORDS_URL, GITHUB_TOKEN, genre_file_map):
     user_id = event.source.user_id
-    genre = event.postback.data if hasattr(event, 'postback') else event.message.text.strip()
+    selected_genre = event.postback.data if hasattr(event, 'postback') else event.message.text.strip()
 
-    if genre not in genre_file_map:
+    print(f"[DEBUG] ジャンル選択を受信: {selected_genre}")
+
+    if selected_genre not in genre_file_map:
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text="❌ 無効なジャンルが選択されました。もう一度選んでください。")
         )
         return
 
-    # tarotテンプレート読み込み
-    template = load_tarot_template(genre_file_map[genre])
+    print(f"[DEBUG] テンプレート読み込み開始: {selected_genre}")
+    template = load_tarot_template(selected_genre)
     if not template:
         line_bot_api.reply_message(
             event.reply_token,
@@ -26,12 +28,13 @@ def handle_genre_selection(event, line_bot_api, PASSWORDS_URL, GITHUB_TOKEN, gen
         )
         return
 
-    # 占い結果のメッセージ整形
-    result_message = f"🔮【{genre}】占い結果\n\n"
-    for i, card in enumerate(template['cards'], 1):
-        result_message += f"{i}枚目: {card['name']}（{card['position']}）\n意味: {card['meaning']}\n\n"
+    # 占い結果メッセージ作成
+    result_message = f"🔮【{selected_genre}】占い結果\n\n"
+    for key, value in template.items():
+        result_message += f"{key}: {value}\n\n"
 
-    result_message += f"\n💡 総合アドバイス:\n{template['advice']}"
+    print(f"[DEBUG] 占い結果生成完了: {selected_genre}")
+    print(f"[DEBUG] メッセージ送信実行")
 
     # 返信
     line_bot_api.reply_message(
