@@ -1,34 +1,41 @@
 
-# main.py
-
 import os
 import json
+import requests
+import base64
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+
 from genre_handlers import handle_genre_selection
 
 app = Flask(__name__)
 
-# LINE Botのチャネルアクセストークンとシークレット
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# genre_file_map.json 読み込み
-def load_genre_file_map():
-    with open("tarot_bot/genre_file_map.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-genre_file_map = load_genre_file_map()
+# GitHub から passwords.json を取得
+def get_passwords():
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(PASSWORDS_URL, headers=headers)
+    if response.status_code == 200:
+        content = base64.b64decode(response.json()["content"]).decode("utf-8-sig")
+        passwords = json.loads(content)
+        print("✅ Loaded passwords:", passwords)
+        return passwords
+    else:
+        print(f"❌ Failed to load passwords.json: {response.status_code} {response.text}")
+        return []
 
-@app.route("/callback", methods=["POST"])
-def callback():
+@app.route("/webhook", methods=["POST"])
+def webhook():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
 
@@ -41,18 +48,40 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    text = event.message.text.strip()
+    user_message = event.message.text.strip()
+    user_id = event.source.user_id
 
-    # パスワード認証部分はここに入る（省略）
+    # user_states を初期化
+    if not hasattr(app, "user_states"):
+        app.user_states = {}
+    state = app.user_states.get(user_id, {"stage": "password"})
 
-    # ジャンル選択とみなして handle_genre_selection を呼び出す
-    handle_genre_selection(
-        event,
-        line_bot_api,
-        PASSWORDS_URL,
-        GITHUB_TOKEN,
-        genre_file_map
-    )
+    if state["stage"] == "password":
+        passwords = get_passwords()
+        matching_password = next((p for p in passwords if p["password"] == user_message and not p["used"]), None)
+
+        if matching_password:
+            matching_password["used"] = True  # 使用済み（簡易実装、本番はPUTで更新）
+            app.user_states[user_id] = {"stage": "genre_selection"}
+
+            reply_text = "✅パスワード認証成功！ジャンルを選んでください。"
+            quick_reply = QuickReply(items=[
+                QuickReplyButton(action=MessageAction(label="恋愛運", text="恋愛運")),
+                QuickReplyButton(action=MessageAction(label="仕事運", text="仕事運")),
+                QuickReplyButton(action=MessageAction(label="金運", text="金運")),
+                QuickReplyButton(action=MessageAction(label="結婚", text="結婚")),
+                QuickReplyButton(action=MessageAction(label="今日の運勢", text="今日の運勢")),
+            ])
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text, quick_reply=quick_reply))
+
+        else:
+            reply_text = "❌パスワードが無効です。正しいパスワードを入力してください。"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+
+    elif state["stage"] == "genre_selection":
+        genre = user_message
+        handle_genre_selection(event, genre)
+        app.user_states[user_id] = {"stage": "password"}
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
