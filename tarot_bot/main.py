@@ -25,12 +25,12 @@ PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/
 def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     r = requests.get(PASSWORDS_URL, headers=headers)
-    print(f"[DEBUG] GitHub API status: {r.status_code}")  # デバッグ
+    print(f"[DEBUG] GitHub API status: {r.status_code}")
     r.raise_for_status()
     content = r.json()["content"]
     decoded_content = base64.b64decode(content).decode("utf-8")
     passwords = json.loads(decoded_content)
-    print(f"[DEBUG] Loaded passwords: {passwords}")  # デバッグ
+    print(f"[DEBUG] Loaded passwords: {passwords}")
     return passwords
 
 @app.route("/", methods=["GET"])
@@ -53,21 +53,27 @@ def handle_message(event):
     user_id = event.source.user_id
     user_message = event.message.text.strip()
 
-    print(f"[DEBUG] Received message: {user_message}")  # デバッグ
-
     try:
         passwords = get_passwords_from_github()
     except Exception as e:
-        print(f"[ERROR] Failed to fetch passwords.json: {e}")  # デバッグ
+        print(f"[ERROR] Failed to fetch passwords.json: {e}")
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text="パスワード取得エラーが発生しました。しばらくしてからお試しください。")
         )
         return
 
-    if user_message in passwords:
-        print("[DEBUG] Password matched → Sending genre selection")  # デバッグ
-        # 認証成功 → ジャンル選択クイックリプライ（未来の恋愛を除去）
+    print(f"[DEBUG] Received message: {user_message}")
+
+    # パスワード認証チェック
+    matched_password_entry = None
+    for pw_entry in passwords:
+        if pw_entry["password"] == user_message and pw_entry["used"] == False:
+            matched_password_entry = pw_entry
+            break
+
+    if matched_password_entry:
+        print(f"[DEBUG] Password matched → Sending genre selection")
         quick_reply_buttons = [
             QuickReplyButton(action=MessageAction(label=genre, text=genre))
             for genre in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
@@ -79,13 +85,8 @@ def handle_message(event):
                 quick_reply=QuickReply(items=quick_reply_buttons)
             )
         )
-    elif user_message in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]:
-        print(f"[DEBUG] Genre selected: {user_message} → Calling send_tarot_reading")  # デバッグ
-        from genre_handlers import send_tarot_reading
-        send_tarot_reading(event, user_message)
     else:
-        print("[DEBUG] Unrecognized input → Asking for password")  # デバッグ
-        # 認証失敗
+        print(f"[DEBUG] Unrecognized input → Asking for password")
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text="❌パスワードを入力してください。")
