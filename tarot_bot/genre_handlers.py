@@ -1,21 +1,24 @@
-﻿
+
 from linebot.models import TextSendMessage
 
-# line_bot_api をインポートする
-import os
-from linebot import LineBotApi
-
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-
-# send_tarot_reading 関数
-def send_tarot_reading(event, genre):
-    print(f"[DEBUG] send_tarot_reading called with genre: {genre}")
-    
-    # 仮の返信 → 本番はここにタロット結果を入れる
-    result_text = f"【{genre}】のタロット結果はこちら → 仮の結果です。"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=result_text)
+def send_genre_selection(event):
+    message = TextSendMessage(
+        text="🔮ジャンルを選んでください。\n1️⃣ 恋愛運\n2️⃣ 仕事運\n3️⃣ 金運\n4️⃣ 結婚\n5️⃣ 今日の運勢"
     )
+    return message
+
+def send_tarot_reading(event, genre):
+    if genre == "恋愛運":
+        result = "💖 恋愛運の診断結果です..."
+    elif genre == "仕事運":
+        result = "💼 仕事運の診断結果です..."
+    elif genre == "金運":
+        result = "💰 金運の診断結果です..."
+    elif genre == "結婚":
+        result = "💍 結婚の診断結果です..."
+    elif genre == "今日の運勢":
+        result = "🌟 今日の運勢の診断結果です..."
+    else:
+        result = "⚠️ ジャンルが認識できませんでした。"
+
+    return TextSendMessage(text=result)
