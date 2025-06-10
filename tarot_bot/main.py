@@ -92,26 +92,34 @@ def handle_message(event):
     # ② パスワード認証チェック
     matched_password_entry = None
     for pw_entry in passwords:
-        if pw_entry["password"] == user_message and pw_entry["used"] == False:
+        if pw_entry["password"] == user_message:
             matched_password_entry = pw_entry
             break
 
     if matched_password_entry:
-        print(f"[DEBUG] Password matched → Sending genre selection")
-        matched_password_entry["used"] = True  # used を True に変更
-        update_passwords_on_github(passwords, sha)  # GitHub に更新
+        if matched_password_entry["used"] == False:
+            print(f"[DEBUG] Password matched → Sending genre selection")
+            matched_password_entry["used"] = True  # used を True に変更
+            update_passwords_on_github(passwords, sha)  # GitHub に更新
 
-        quick_reply_buttons = [
-            QuickReplyButton(action=MessageAction(label=genre, text=genre))
-            for genre in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
-        ]
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(
-                text="✅パスワード認証成功！ジャンルを選んでください。",
-                quick_reply=QuickReply(items=quick_reply_buttons)
+            quick_reply_buttons = [
+                QuickReplyButton(action=MessageAction(label=genre, text=genre))
+                for genre in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
+            ]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="✅パスワード認証成功！ジャンルを選んでください。",
+                    quick_reply=QuickReply(items=quick_reply_buttons)
+                )
             )
-        )
+        else:
+            print(f"[DEBUG] Password already used → Inform user")
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="❌このパスワードはすでに使用済みです。
+ご利用には新しいチケットをご購入ください。")
+            )
     else:
         print(f"[DEBUG] Unrecognized input → Asking for password")
         line_bot_api.reply_message(
