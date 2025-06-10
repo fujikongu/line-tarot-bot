@@ -1,34 +1,26 @@
-﻿
-from flask import QuickReply, QuickReplyButton, MessageAction
-from tarot_bot.tarot_data import tarot_data
 
-def handle_genre_selection(event, line_bot_api, password_data):
-    user_id = event.source.user_id
-    genre = event.message.text.strip()
+from linebot.models import QuickReply, QuickReplyButton, MessageAction
+import tarot_data
 
-    # 有効なジャンルか確認
-    if genre not in tarot_data:
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="❌ 無効なジャンルです。もう一度選んでください。")
-        )
-        return
+# ジャンル選択後の処理
+def handle_genre_selection(event, genre):
+    tarot_texts = tarot_data.tarot_data.get(genre, [])
 
-    import random
-    selected_cards = random.sample(list(tarot_data[genre].keys()), 5)
+    if not tarot_texts:
+        reply_text = "指定されたジャンルが見つかりませんでした。"
+    else:
+        # 5枚のカードを選択（とりあえず最初の5つを取得）
+        selected_cards = tarot_texts[:5]
+        reply_text = "\n\n".join(selected_cards)
 
-    messages = []
-    for i, card in enumerate(selected_cards, start=1):
-        meaning = tarot_data[genre][card]
-        messages.append(f"【{i}枚目】{card}\n{meaning}")
+    # ユーザーに送信するレスポンス
+    return reply_text
 
-    result_text = "\n\n".join(messages)
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=f"🔮 {genre} の占い結果:\n\n{result_text}")
-    )
-
-    # パスワードを削除して1回限りにする
-    if user_id in password_data:
-        del password_data[user_id]
+# ジャンル選択用クイックリプライの生成
+def create_genre_quick_reply():
+    genres = list(tarot_data.tarot_data.keys())
+    items = [
+        QuickReplyButton(action=MessageAction(label=genre, text=genre))
+        for genre in genres
+    ]
+    return QuickReply(items=items)
