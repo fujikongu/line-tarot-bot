@@ -117,8 +117,7 @@ def handle_message(event):
             print(f"[DEBUG] Password already used → Inform user")
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="❌このパスワードはすでに使用済みです。
-ご利用には新しいチケットをご購入ください。")
+                TextSendMessage(text="❌このパスワードはすでに使用済みです。\nご利用には新しいチケットをご購入ください。")
             )
     else:
         print(f"[DEBUG] Unrecognized input → Asking for password")
