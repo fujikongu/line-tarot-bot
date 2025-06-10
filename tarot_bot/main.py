@@ -88,8 +88,7 @@ def handle_message(event):
         # 認証失敗
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="❌パスワードを入力してください。
-例：mem1091")
+            TextSendMessage(text="❌パスワードを入力してください。")
         )
 
 if __name__ == "__main__":
