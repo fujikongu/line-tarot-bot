@@ -1,4 +1,4 @@
-
+﻿
 from linebot.models import QuickReply, QuickReplyButton, MessageAction
 import tarot_data
 
