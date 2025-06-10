@@ -21,17 +21,34 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 # GitHubのpasswords.jsonのURL
 PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-# GitHub から passwords.json を取得
+# GitHub から passwords.json を取得 + SHAも返す
 def get_passwords_from_github():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     r = requests.get(PASSWORDS_URL, headers=headers)
     print(f"[DEBUG] GitHub API status: {r.status_code}")
     r.raise_for_status()
     content = r.json()["content"]
+    sha = r.json()["sha"]
     decoded_content = base64.b64decode(content).decode("utf-8")
     passwords = json.loads(decoded_content)
     print(f"[DEBUG] Loaded passwords: {passwords}")
-    return passwords
+    return passwords, sha
+
+# GitHub に passwords.json を更新
+def update_passwords_on_github(passwords, sha):
+    updated_content = base64.b64encode(json.dumps(passwords, indent=4, ensure_ascii=False).encode("utf-8")).decode("utf-8")
+    update_headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    update_data = {
+        "message": "Update used password",
+        "content": updated_content,
+        "sha": sha
+    }
+    response = requests.put(PASSWORDS_URL, headers=update_headers, json=update_data)
+    print(f"[DEBUG] GitHub update status: {response.status_code}")
+    response.raise_for_status()
 
 @app.route("/", methods=["GET"])
 def index():
@@ -54,7 +71,7 @@ def handle_message(event):
     user_message = event.message.text.strip()
 
     try:
-        passwords = get_passwords_from_github()
+        passwords, sha = get_passwords_from_github()
     except Exception as e:
         print(f"[ERROR] Failed to fetch passwords.json: {e}")
         line_bot_api.reply_message(
@@ -81,6 +98,9 @@ def handle_message(event):
 
     if matched_password_entry:
         print(f"[DEBUG] Password matched → Sending genre selection")
+        matched_password_entry["used"] = True  # used を True に変更
+        update_passwords_on_github(passwords, sha)  # GitHub に更新
+
         quick_reply_buttons = [
             QuickReplyButton(action=MessageAction(label=genre, text=genre))
             for genre in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]

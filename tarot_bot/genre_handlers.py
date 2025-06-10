@@ -1,26 +1,21 @@
 ﻿
-from linebot.models import QuickReply, QuickReplyButton, MessageAction
-import tarot_data
+from linebot.models import TextSendMessage
 
-# ジャンル選択後の処理
-def handle_genre_selection(event, genre):
-    tarot_texts = tarot_data.tarot_data.get(genre, [])
+# line_bot_api をインポートする
+import os
+from linebot import LineBotApi
 
-    if not tarot_texts:
-        reply_text = "指定されたジャンルが見つかりませんでした。"
-    else:
-        # 5枚のカードを選択（とりあえず最初の5つを取得）
-        selected_cards = tarot_texts[:5]
-        reply_text = "\n\n".join(selected_cards)
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
-    # ユーザーに送信するレスポンス
-    return reply_text
+# send_tarot_reading 関数
+def send_tarot_reading(event, genre):
+    print(f"[DEBUG] send_tarot_reading called with genre: {genre}")
+    
+    # 仮の返信 → 本番はここにタロット結果を入れる
+    result_text = f"【{genre}】のタロット結果はこちら → 仮の結果です。"
 
-# ジャンル選択用クイックリプライの生成
-def create_genre_quick_reply():
-    genres = list(tarot_data.tarot_data.keys())
-    items = [
-        QuickReplyButton(action=MessageAction(label=genre, text=genre))
-        for genre in genres
-    ]
-    return QuickReply(items=items)
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=result_text)
+    )
