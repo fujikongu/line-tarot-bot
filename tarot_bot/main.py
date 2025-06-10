@@ -67,10 +67,10 @@ def handle_message(event):
 
     if user_message in passwords:
         print("[DEBUG] Password matched → Sending genre selection")  # デバッグ
-        # 認証成功 → ジャンル選択クイックリプライ
+        # 認証成功 → ジャンル選択クイックリプライ（未来の恋愛を除去）
         quick_reply_buttons = [
             QuickReplyButton(action=MessageAction(label=genre, text=genre))
-            for genre in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]
+            for genre in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
         ]
         line_bot_api.reply_message(
             event.reply_token,
@@ -79,7 +79,7 @@ def handle_message(event):
                 quick_reply=QuickReply(items=quick_reply_buttons)
             )
         )
-    elif user_message in ["恋愛運", "仕事運", "金運", "結婚", "未来の恋愛", "今日の運勢"]:
+    elif user_message in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]:
         print(f"[DEBUG] Genre selected: {user_message} → Calling send_tarot_reading")  # デバッグ
         from genre_handlers import send_tarot_reading
         send_tarot_reading(event, user_message)
