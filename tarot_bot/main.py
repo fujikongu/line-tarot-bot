@@ -65,7 +65,14 @@ def handle_message(event):
 
     print(f"[DEBUG] Received message: {user_message}")
 
-    # パスワード認証チェック
+    # ① ジャンル選択処理
+    if user_message in ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]:
+        print(f"[DEBUG] Genre selected: {user_message} → Calling send_tarot_reading")
+        from genre_handlers import send_tarot_reading
+        send_tarot_reading(event, user_message)
+        return
+
+    # ② パスワード認証チェック
     matched_password_entry = None
     for pw_entry in passwords:
         if pw_entry["password"] == user_message and pw_entry["used"] == False:
