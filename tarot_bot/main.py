@@ -82,8 +82,7 @@ def handle_message(event):
                 line_bot_api.reply_message(
                     event.reply_token,
                     TextSendMessage(
-                        text="✅パスワード認証成功！
-ジャンルを選んでください。",
+                        text="✅パスワード認証成功！\nジャンルを選んでください。",
                         quick_reply=QuickReply(items=quick_reply_buttons)
                     )
                 )
@@ -91,8 +90,7 @@ def handle_message(event):
                 print(f"[DEBUG] Password already used → Inform user")
                 line_bot_api.reply_message(
                     event.reply_token,
-                    TextSendMessage(text="❌このパスワードはすでに使用済みです。
-ご利用には新しいチケットをご購入ください。")
+                    TextSendMessage(text="❌このパスワードはすでに使用済みです。\nご利用には新しいチケットをご購入ください。")
                 )
             break
 
