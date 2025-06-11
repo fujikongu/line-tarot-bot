@@ -2,7 +2,7 @@
 import random
 from linebot.models import TextSendMessage
 from .genre_file_map import genre_file_map
-from .main import line_bot_api
+
 
 def send_tarot_reading(event, genre):
     tarot_template = genre_file_map.get(genre)
