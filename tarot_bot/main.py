@@ -96,8 +96,7 @@ def handle_message(event):
                     line_bot_api.reply_message(
                         event.reply_token,
                         TextSendMessage(
-                            text="✅パスワード認証成功！
-ジャンルを選んでください。",
+                            text="✅パスワード認証成功！\nジャンルを選んでください。",
                             quick_reply=QuickReply(items=quick_reply_buttons)
                         )
                     )
