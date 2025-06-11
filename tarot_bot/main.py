@@ -22,12 +22,11 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # 状態管理
-user_states = {}  # user_id -> "awaiting_genre" or None
+user_states = {}
 
 # GitHub passwords.json URL
 GITHUB_PASSWORDS_URL = "https://api.github.com/repos/fujikongu/line-tarot-bot/contents/password_issuer/passwords.json"
 
-# Webhookエンドポイント
 @app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers["X-Line-Signature"]
@@ -40,23 +39,20 @@ def callback():
 
     return "OK"
 
-# メッセージ受信時の処理
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_id = event.source.user_id
     user_message = event.message.text.strip()
     print(f"[DEBUG] Received message: {user_message}")
 
-    # 状態確認
     state = user_states.get(user_id, None)
 
     if state == "awaiting_genre":
-        # ジャンル選択フェーズ
         valid_genres = ["恋愛運", "仕事運", "金運", "結婚", "今日の運勢"]
         if user_message in valid_genres:
             print(f"[DEBUG] Genre selected: {user_message} → Calling send_tarot_reading")
-            send_tarot_reading(event, user_message)
-            user_states.pop(user_id, None)  # 状態クリア
+            send_tarot_reading(event, user_message, line_bot_api)
+            user_states.pop(user_id, None)
         else:
             print(f"[DEBUG] Unrecognized genre → Asking again")
             line_bot_api.reply_message(
@@ -65,7 +61,6 @@ def handle_message(event):
             )
         return
 
-    # パスワード認証フェーズ
     passwords = load_passwords()
     matched = False
     for pw_entry in passwords:
@@ -102,7 +97,6 @@ def handle_message(event):
             TextSendMessage(text="❌パスワードを入力してください。")
         )
 
-# GitHub passwords.json 読み込み
 def load_passwords():
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
@@ -114,7 +108,6 @@ def load_passwords():
     decoded_content = base64.b64decode(content).decode("utf-8")
     return json.loads(decoded_content)
 
-# GitHub passwords.json 更新
 def update_passwords(passwords):
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",

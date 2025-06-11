@@ -3,8 +3,7 @@ import random
 from linebot.models import TextSendMessage
 from .genre_file_map import genre_file_map
 
-
-def send_tarot_reading(event, genre):
+def send_tarot_reading(event, genre, line_bot_api):
     tarot_template = genre_file_map.get(genre)
     if not tarot_template:
         line_bot_api.reply_message(
@@ -15,6 +14,7 @@ def send_tarot_reading(event, genre):
 
     cards = random.sample(tarot_template["cards"], 5)
     result_text = f"🔮【{genre}の占い結果】🔮\n\n"
+
     for i, card in enumerate(cards, 1):
         result_text += f"{i}. {card['name']} - {card['meaning']}\n\n"
 
