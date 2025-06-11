@@ -105,8 +105,7 @@ def handle_message(event):
                     line_bot_api.reply_message(
                         event.reply_token,
                         TextSendMessage(
-                            text="❌このパスワードはすでに使用済みです。
-ご利用には新しいチケットをご購入ください。"
+                            text="❌このパスワードはすでに使用済みです。\nご利用には新しいチケットをご購入ください。"
                         )
                     )
                 break
