@@ -6,7 +6,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 
-from genre_handlers import send_tarot_reading
+from .genre_handlers import send_tarot_reading
 
 app = Flask(__name__)
 
